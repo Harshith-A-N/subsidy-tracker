@@ -17,20 +17,26 @@ _Update this file at the start of each week/milestone so everyone can see curren
 
 | Person | Module | Task |
 |---|---|---|
-| B | Module 2 | Review `Application` + `ApplicationStatus`. Sketch how eligibility scoring will work — what inputs feed the score, how status transitions between verification stages (field → district → finance). |
+| B | Module 2 | Reviewed `Application` + `ApplicationStatus`. Designed eligibility scoring approach, verification workflow, application lifecycle states, and routing logic between field → district → finance verification stages. Documentation added for Module 2 design. |
 | C | Module 3 | Review `Application` + `SchemeSlab`. Sketch a disbursement milestone entity (e.g., `application`, `milestoneName`, `dueDate`, `amount`, `isCompleted`). |
 | D | Module 4 | Review `RegionalBudget`. Sketch what reports/dashboards will be needed (scheme-wise totals, region utilization %). Research PDF/Excel export libraries for later. |
 
 **Milestone 1 checklist:**
-- [ ] Shared entities PR merged into `dev`
-- [ ] Everyone able to pull `dev`, run the app locally, and see all 6 tables
-- [ ] B, C, D each have a design sketch (doesn't need to be code yet) for their module
+- [x] Shared entities PR merged into `dev`
+- [x] Everyone able to pull `dev`, run the app locally, and see all 6 tables
+- [x] B completed Module 2 design documentation (eligibility scoring, verification workflow, application lifecycle, routing logic)
+- [ ] C and D complete their respective module design sketches
 - [ ] Team regroups before end of Week 2 to review sketches together before writing heavy code
 
 ---
 
 ## Milestone 2 (Weeks 3–4): Eligibility Scoring & Verification Workflow Development
-_Not started yet._
+
+Planned:
+- Implement eligibility scoring engine
+- Implement multi-level verification workflow
+- Add application routing logic
+- Develop approval, rejection, and re-verification flows
 
 ## Milestone 3 (Weeks 5–6): Disbursement & Reporting Development
 _Not started yet._
