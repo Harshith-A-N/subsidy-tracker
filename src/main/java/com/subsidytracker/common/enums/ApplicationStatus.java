@@ -2,6 +2,8 @@ package com.subsidytracker.common.enums;
 
 public enum ApplicationStatus {
     SUBMITTED,              // just applied, nothing reviewed yet
+    ELIGIBLE,               // Meets all eligibility conditions and score >= 40
+    NOT_ELIGIBLE,           // Fails mandatory conditions or score < 40
     ELIGIBILITY_SCORED,     // automated scoring done, waiting to enter verification
     PENDING_FIELD_REVIEW,   // sitting with field officer
     PENDING_DISTRICT_REVIEW,// field officer approved, now with district officer

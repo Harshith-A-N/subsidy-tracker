@@ -34,6 +34,10 @@ public class Scheme {
     // (kept simple for now; could normalize into its own table later if needed)
     private String allowedCategories;
 
+    // Comma-separated list of mandatory documents required for this scheme
+    @Column(name = "required_documents", length = 1000)
+    private String requiredDocuments;
+
     @Column(nullable = false)
     private boolean isActive = true;
 }

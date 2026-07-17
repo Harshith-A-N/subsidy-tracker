@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Entity
@@ -39,4 +40,17 @@ public class Beneficiary {
     @Column(nullable = false)
     private LocalDate registrationDate;
 
+    // --- Module 2 additions (needed for eligibility scoring) ---
+
+    // Annual income used to check against scheme income limits
+    @Column(name = "annual_income", precision = 15, scale = 2)
+    private BigDecimal annualIncome;
+
+    // District where the beneficiary resides
+    @Column(length = 100)
+    private String district;
+
+    // State where the beneficiary resides
+    @Column(length = 100)
+    private String state;
 }
