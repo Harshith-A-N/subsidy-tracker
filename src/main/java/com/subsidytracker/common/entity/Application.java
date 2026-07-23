@@ -35,4 +35,7 @@ public class Application {
 
     @Column(nullable = false)
     private LocalDate submissionDate;
+
+    @Column(columnDefinition = "TEXT")
+    private String remarks;
 }
