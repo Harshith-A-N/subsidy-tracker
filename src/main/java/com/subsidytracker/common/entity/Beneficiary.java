@@ -1,5 +1,6 @@
 package com.subsidytracker.common.entity;
 
+import java.math.BigDecimal;
 import com.subsidytracker.common.enums.BeneficiaryCategory;
 import  jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -38,5 +39,11 @@ public class Beneficiary {
 
     @Column(nullable = false)
     private LocalDate registrationDate;
+
+    @Column(nullable = false)
+    private String region;
+
+    @Column(nullable = false)
+    private BigDecimal annualIncome;
 
 }

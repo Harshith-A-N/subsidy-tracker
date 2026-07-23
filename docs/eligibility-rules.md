@@ -22,6 +22,8 @@ The system performs rule validation and assigns one of the following results:
 - Not Eligible
 - Requires Manual Review
 
+If income or category fails, reject outright (NOT_ELIGIBLE). If documents or identity are incomplete/unclear, flag for manual review (MANUAL_REVIEW_REQUIRED).
+
 ## Output
 
 If all required conditions are satisfied:

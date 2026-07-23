@@ -36,4 +36,7 @@ public class Scheme {
 
     @Column(nullable = false)
     private boolean isActive = true;
+
+    @Column(name = "required_documents", length = 1000)
+    private String requiredDocuments; // comma-separated list, e.g. "AADHAR,INCOME_CERTIFICATE,ADDRESS_PROOF"
 }
