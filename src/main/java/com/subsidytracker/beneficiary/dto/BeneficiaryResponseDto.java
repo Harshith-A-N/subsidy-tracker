@@ -18,4 +18,6 @@ public class BeneficiaryResponseDto {
     private LocalDate registrationDate;
     private String region;
     private BigDecimal annualIncome;
+    private Long userId;
+    private String email;
 }

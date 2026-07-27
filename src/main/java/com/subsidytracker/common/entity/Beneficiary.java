@@ -46,4 +46,8 @@ public class Beneficiary {
     @Column(nullable = false)
     private BigDecimal annualIncome;
 
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", unique = true)
+    private User user;
+
 }
