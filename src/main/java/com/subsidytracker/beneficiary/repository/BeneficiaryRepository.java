@@ -18,4 +18,7 @@ public interface BeneficiaryRepository extends JpaRepository<Beneficiary, Long> 
 
     // Used by routing logic: find all beneficiaries in a given region
     List<Beneficiary> findByRegion(String region);
+
+    // Used by Phase 2: link authenticated user to their beneficiary profile
+    Optional<Beneficiary> findByUserId(long userId);
 }
