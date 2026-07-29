@@ -1,6 +1,7 @@
 package com.subsidytracker.common.enums;
 
 public enum ApplicationStatus {
+    DRAFT,
     SUBMITTED,
     ELIGIBILITY_PENDING,
     ELIGIBLE,

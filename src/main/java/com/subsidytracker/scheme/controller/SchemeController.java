@@ -6,6 +6,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import org.springframework.security.core.Authentication;
+import com.subsidytracker.common.exception.ResourceNotFoundException;
+
 import java.util.List;
 
 @RestController
@@ -24,13 +27,26 @@ public class SchemeController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<SchemeResponseDto> getById(@PathVariable Long id) {
-        return ResponseEntity.ok(schemeService.getSchemeById(id));
+    public ResponseEntity<SchemeResponseDto> getById(@PathVariable Long id, Authentication authentication) {
+        SchemeResponseDto scheme = schemeService.getSchemeById(id);
+        boolean isAdmin = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+
+        if (!scheme.isActive() && !isAdmin) {
+            throw new ResourceNotFoundException("Scheme", id);
+        }
+        return ResponseEntity.ok(scheme);
     }
 
     @GetMapping
-    public ResponseEntity<List<SchemeResponseDto>> getAll() {
-        return ResponseEntity.ok(schemeService.getAllSchemes());
+    public ResponseEntity<List<SchemeResponseDto>> getAll(Authentication authentication) {
+        boolean isAdmin = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+
+        if (isAdmin) {
+            return ResponseEntity.ok(schemeService.getAllSchemes());
+        }
+        return ResponseEntity.ok(schemeService.getActiveSchemes());
     }
 
     @PutMapping("/{id}")

@@ -1,6 +1,8 @@
 package com.subsidytracker.eligibility.service;
 
 import com.subsidytracker.common.entity.Application;
+import com.subsidytracker.common.entity.Beneficiary;
+import com.subsidytracker.common.entity.SchemeSlab;
 import com.subsidytracker.common.entity.User;
 import com.subsidytracker.common.entity.Verification;
 import com.subsidytracker.common.enums.ApplicationStatus;
@@ -14,31 +16,45 @@ import com.subsidytracker.eligibility.dto.VerificationResponseDto;
 import com.subsidytracker.eligibility.repository.ApplicationRepository;
 import com.subsidytracker.eligibility.repository.UserRepository;
 import com.subsidytracker.eligibility.repository.VerificationRepository;
+import com.subsidytracker.scheme.repository.SchemeSlabRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.util.Optional;
 
 @Service
 public class VerificationService {
 
+    // ---- Routing policy thresholds ----
+    // Applications with a high eligibility score AND a low grant amount
+    // are considered low-risk and can skip District review (fast-tracked
+    // directly from Field to Finance).
+    private static final double FAST_TRACK_SCORE_THRESHOLD = 80.0;
+    private static final BigDecimal FAST_TRACK_GRANT_LIMIT = new BigDecimal("50000");
+
     private final ApplicationRepository applicationRepository;
     private final VerificationRepository verificationRepository;
     private final UserRepository userRepository;
+    private final SchemeSlabRepository schemeSlabRepository;
 
     public VerificationService(ApplicationRepository applicationRepository,
                                VerificationRepository verificationRepository,
-                               UserRepository userRepository) {
+                               UserRepository userRepository,
+                               SchemeSlabRepository schemeSlabRepository) {
         this.applicationRepository = applicationRepository;
         this.verificationRepository = verificationRepository;
         this.userRepository = userRepository;
+        this.schemeSlabRepository = schemeSlabRepository;
     }
 
     @Transactional
-    public VerificationResponseDto processVerification(Long applicationId, VerificationRequestDto request) {
+    public VerificationResponseDto processVerification(Long applicationId, VerificationRequestDto request, long officerId) {
         Application application = applicationRepository.findById(applicationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Application", applicationId));
 
-        User officer = userRepository.findById(request.getOfficerId())
-                .orElseThrow(() -> new ResourceNotFoundException("Officer", request.getOfficerId()));
+        User officer = userRepository.findById(officerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Officer", officerId));
 
         VerificationLevel level = determineLevelFromRole(officer.getRole());
 
@@ -58,7 +74,7 @@ public class VerificationService {
         verificationRepository.save(verification);
 
         // Advance (or send back) the application based on the decision
-        ApplicationStatus newStatus = routeApplication(request.getDecision(), level);
+        ApplicationStatus newStatus = routeApplication(request.getDecision(), level, application);
         application.setStatus(newStatus);
         application.setRemarks(request.getRemarks());
         applicationRepository.save(application);
@@ -128,8 +144,15 @@ public class VerificationService {
         }
     }
 
-    // ---- Region-based routing check (your routing-logic.md update) ----
+    // ---- Region-based routing check ----
+    // FINANCE_APPROVER and ADMIN operate across all regions (statewide jurisdiction).
+    // FIELD_OFFICER and DISTRICT_OFFICER must match the beneficiary's region.
     private void validateOfficerRegion(User officer, Application application) {
+        Role role = officer.getRole();
+        if (role == Role.FINANCE_APPROVER || role == Role.ADMIN) {
+            return; // statewide jurisdiction — no region restriction
+        }
+
         String beneficiaryRegion = application.getBeneficiary().getRegion();
         String officerRegion = officer.getRegion();
 
@@ -141,8 +164,10 @@ public class VerificationService {
         }
     }
 
-    // ---- Decision -> next ApplicationStatus, using YOUR finalized enum ----
-    private ApplicationStatus routeApplication(VerificationDecision decision, VerificationLevel level) {
+    // ---- Decision -> next ApplicationStatus, with dynamic routing policy ----
+    private ApplicationStatus routeApplication(VerificationDecision decision,
+                                                VerificationLevel level,
+                                                Application application) {
 
         // Re-verification can be requested at any stage - sent back for correction
         if (decision == VerificationDecision.RE_VERIFICATION_REQUESTED) {
@@ -157,13 +182,48 @@ public class VerificationService {
             };
         }
 
-        // APPROVED - advance to the next stage
+        // APPROVED - advance to the next stage with dynamic routing
         return switch (level) {
             case FIELD -> {
+                // Policy: low-risk applications skip District review
+                if (shouldFastTrack(application)) {
+                    yield ApplicationStatus.FINANCE_REVIEW_PENDING;
+                }
                 yield ApplicationStatus.DISTRICT_REVIEW_PENDING;
             }
             case DISTRICT -> ApplicationStatus.FINANCE_REVIEW_PENDING;
             case FINANCE -> ApplicationStatus.READY_FOR_DISBURSEMENT;
         };
+    }
+
+    /**
+     * Determines whether an application qualifies for fast-track routing
+     * (skipping District review after Field approval).
+     *
+     * An application is fast-tracked when BOTH conditions are met:
+     *   1. Eligibility score >= FAST_TRACK_SCORE_THRESHOLD
+     *   2. Applicable grant amount (from SchemeSlab) <= FAST_TRACK_GRANT_LIMIT
+     *
+     * If no matching SchemeSlab exists for the beneficiary's category,
+     * the application is NOT fast-tracked (conservative default).
+     */
+    private boolean shouldFastTrack(Application application) {
+        // Condition 1: high eligibility score
+        if (application.getEligibilityScore() < FAST_TRACK_SCORE_THRESHOLD) {
+            return false;
+        }
+
+        // Condition 2: low grant amount from the matching SchemeSlab
+        Beneficiary beneficiary = application.getBeneficiary();
+        Long schemeId = application.getScheme().getId();
+
+        Optional<SchemeSlab> slab = schemeSlabRepository.findBySchemeIdAndCategory(
+                schemeId, beneficiary.getCategory());
+
+        if (slab.isEmpty()) {
+            return false; // no slab configured — cannot determine value; do not fast-track
+        }
+
+        return slab.get().getGrantAmount().compareTo(FAST_TRACK_GRANT_LIMIT) <= 0;
     }
 }

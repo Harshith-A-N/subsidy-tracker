@@ -57,6 +57,10 @@ public class SchemeService {
         return schemeRepository.findAll().stream().map(this::toDto).toList();
     }
 
+    public List<SchemeResponseDto> getActiveSchemes() {
+        return schemeRepository.findByIsActiveTrue().stream().map(this::toDto).toList();
+    }
+
     @Transactional
     public SchemeResponseDto updateScheme(Long id, SchemeRequestDto request) {
         Scheme scheme = findSchemeOrThrow(id);

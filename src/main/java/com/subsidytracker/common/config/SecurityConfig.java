@@ -12,6 +12,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
@@ -44,12 +45,14 @@ public class SecurityConfig {
     }
 
     /**
-     * Phase 1 security filter chain.
+     * Security filter chain with role-based URL protection.
      *
      * - Auth endpoints (register/login) are fully public.
-     * - All other existing API endpoints require authentication but NO role
-     *   restrictions yet — this keeps existing modules working while we add
-     *   role-based rules in later phases.
+     * - Scheme management (POST, PUT, DELETE) restricted to ADMIN.
+     * - Verification actions restricted to officers.
+     * - Document verification restricted to officers.
+     * - Manual eligibility recalculation restricted to ADMIN.
+     * - All other endpoints require authentication (any role).
      * - CSRF disabled: pure REST API, no browser form submissions.
      * - Stateless sessions: each request must carry its own credentials (HTTP Basic).
      */
@@ -64,7 +67,25 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // Public — registration and login
                 .requestMatchers("/api/v1/auth/**").permitAll()
-                // Everything else requires authentication (any role, no restrictions yet)
+
+                // Scheme management — ADMIN only
+                .requestMatchers(HttpMethod.POST, "/api/v1/schemes/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/v1/schemes/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/schemes/**").hasRole("ADMIN")
+
+                // Verification actions — officers only
+                .requestMatchers(HttpMethod.PATCH, "/api/v1/applications/*/verify")
+                    .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER")
+
+                // Document verification — officers only
+                .requestMatchers(HttpMethod.PATCH, "/api/v1/applications/*/documents/*/verify")
+                    .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER")
+
+                // Manual eligibility recalculation — ADMIN only
+                .requestMatchers(HttpMethod.POST, "/api/v1/applications/*/calculate-eligibility")
+                    .hasRole("ADMIN")
+
+                // Everything else requires authentication (any role)
                 .anyRequest().authenticated()
             )
             .httpBasic(Customizer.withDefaults());
