@@ -39,7 +39,16 @@ public class EligibilityService {
     public ApplicationResponseDto calculateEligibility(Long applicationId) {
         Application application = applicationRepository.findById(applicationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Application", applicationId));
+        return calculateEligibilityForApplication(application);
+    }
 
+    /**
+     * Calculates eligibility for an already-loaded Application.
+     * Called by submitApplication (Phase 5) and by the public
+     * calculateEligibility(Long) method for manual admin re-runs.
+     */
+    @Transactional
+    public ApplicationResponseDto calculateEligibilityForApplication(Application application) {
         Beneficiary beneficiary = application.getBeneficiary();
         Scheme scheme = application.getScheme();
 
@@ -59,11 +68,6 @@ public class EligibilityService {
         }
 
         // ---- Step 2: manual-review triggers (not a hard reject) ----
-        if (!areDocumentsComplete(application, scheme)) {
-            return finalize(application, ApplicationStatus.MANUAL_REVIEW_REQUIRED, 0,
-                    "One or more required documents are missing.");
-        }
-
         if (!hasFieldOfficerForRegion(beneficiary)) {
             return finalize(application, ApplicationStatus.MANUAL_REVIEW_REQUIRED, 0,
                     "No field officer is assigned to beneficiary's region: " + beneficiary.getRegion());
@@ -98,8 +102,18 @@ public class EligibilityService {
                 .anyMatch(c -> c.equalsIgnoreCase(category));
     }
 
-    private boolean areDocumentsComplete(Application application, Scheme scheme) {
-        if (scheme.getRequiredDocuments() == null || scheme.getRequiredDocuments().isBlank()) return true;
+    /**
+     * Determines which required document types are missing for the application.
+     * Returns an empty list if all required documents are present.
+     *
+     * Performs case-insensitive matching of uploaded document types against
+     * the scheme's comma-separated list of required documents.
+     */
+    public List<String> getMissingMandatoryDocuments(Application application) {
+        Scheme scheme = application.getScheme();
+        if (scheme.getRequiredDocuments() == null || scheme.getRequiredDocuments().isBlank()) {
+            return List.of();
+        }
 
         List<Document> uploaded = documentRepository.findByApplicationId(application.getId());
         Set<String> uploadedTypes = uploaded.stream()
@@ -107,10 +121,12 @@ public class EligibilityService {
                 .collect(Collectors.toSet());
 
         List<String> required = Arrays.stream(scheme.getRequiredDocuments().split(","))
-                .map(String::trim).map(String::toLowerCase)
-                .collect(Collectors.toList());
+                .map(String::trim)
+                .toList();
 
-        return uploadedTypes.containsAll(required);
+        return required.stream()
+                .filter(req -> !uploadedTypes.contains(req.toLowerCase()))
+                .toList();
     }
 
     private boolean hasFieldOfficerForRegion(Beneficiary beneficiary) {

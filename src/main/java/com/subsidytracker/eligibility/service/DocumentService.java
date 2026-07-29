@@ -1,13 +1,18 @@
 package com.subsidytracker.eligibility.service;
 
 import com.subsidytracker.common.entity.Application;
+import com.subsidytracker.common.entity.Beneficiary;
 import com.subsidytracker.common.entity.Document;
+import com.subsidytracker.common.entity.User;
+import com.subsidytracker.common.enums.ApplicationStatus;
 import com.subsidytracker.common.enums.DocumentVerificationStatus;
+import com.subsidytracker.common.enums.Role;
 import com.subsidytracker.common.exception.InvalidOperationException;
 import com.subsidytracker.common.exception.ResourceNotFoundException;
 import com.subsidytracker.eligibility.dto.DocumentResponseDto;
 import com.subsidytracker.eligibility.repository.ApplicationRepository;
 import com.subsidytracker.eligibility.repository.DocumentRepository;
+import com.subsidytracker.eligibility.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -18,6 +23,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -26,19 +32,39 @@ public class DocumentService {
     // Folder where uploaded files physically get saved (created if missing)
     private static final String UPLOAD_DIR = "uploads/documents";
 
+    // Statuses that permit document uploads from the owning beneficiary
+    private static final Set<ApplicationStatus> UPLOAD_ALLOWED_STATUSES = Set.of(
+            ApplicationStatus.DRAFT,
+            ApplicationStatus.RE_VERIFICATION_REQUIRED
+    );
+
     private final DocumentRepository documentRepository;
     private final ApplicationRepository applicationRepository;
+    private final UserRepository userRepository;
 
     public DocumentService(DocumentRepository documentRepository,
-                           ApplicationRepository applicationRepository) {
+                           ApplicationRepository applicationRepository,
+                           UserRepository userRepository) {
         this.documentRepository = documentRepository;
         this.applicationRepository = applicationRepository;
+        this.userRepository = userRepository;
     }
 
     @Transactional
-    public DocumentResponseDto uploadDocument(Long applicationId, String documentType, MultipartFile file) {
+    public DocumentResponseDto uploadDocument(Long applicationId, String documentType,
+                                              MultipartFile file, long currentUserId) {
         Application application = applicationRepository.findById(applicationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Application", applicationId));
+
+        // Ownership: application must belong to the authenticated beneficiary
+        validateBeneficiaryOwnership(application, currentUserId);
+
+        // Status gate: only DRAFT and RE_VERIFICATION_REQUIRED allow uploads
+        if (!UPLOAD_ALLOWED_STATUSES.contains(application.getStatus())) {
+            throw new InvalidOperationException(
+                    "Documents can only be uploaded when the application is in DRAFT or RE_VERIFICATION_REQUIRED status. "
+                            + "Current status: " + application.getStatus());
+        }
 
         if (file.isEmpty()) {
             throw new InvalidOperationException("Uploaded file is empty.");
@@ -81,8 +107,82 @@ public class DocumentService {
         return toDto(documentRepository.save(document));
     }
 
-    public List<DocumentResponseDto> getDocumentsForApplication(Long applicationId) {
+    /**
+     * Returns documents for an application with role-based access control.
+     *
+     * BENEFICIARY: can only view documents for their own applications.
+     * FIELD_OFFICER, DISTRICT_OFFICER, FINANCE_APPROVER: can view documents
+     *   for applications currently in their review stage.
+     * ADMIN: full access.
+     */
+    public List<DocumentResponseDto> getDocumentsForApplication(Long applicationId, long currentUserId) {
+        Application application = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Application", applicationId));
+
+        User currentUser = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", currentUserId));
+
+        Role role = currentUser.getRole();
+
+        switch (role) {
+            case ADMIN:
+                // Full access
+                break;
+            case BENEFICIARY:
+                // Ownership check
+                validateBeneficiaryOwnership(application, currentUserId);
+                break;
+            case FIELD_OFFICER:
+                validateOfficerDocumentAccess(application, currentUser,
+                        Set.of(ApplicationStatus.FIELD_VERIFICATION_PENDING));
+                break;
+            case DISTRICT_OFFICER:
+                validateOfficerDocumentAccess(application, currentUser,
+                        Set.of(ApplicationStatus.DISTRICT_REVIEW_PENDING));
+                break;
+            case FINANCE_APPROVER:
+                // Finance Approvers have statewide jurisdiction — no region check
+                if (application.getStatus() != ApplicationStatus.FINANCE_REVIEW_PENDING) {
+                    throw new InvalidOperationException(
+                            "Application is not in your review stage. Current status: " + application.getStatus());
+                }
+                break;
+            default:
+                throw new InvalidOperationException("Your role does not have access to application documents.");
+        }
+
         return documentRepository.findByApplicationId(applicationId).stream().map(this::toDto).toList();
+    }
+
+    /**
+     * Validates that the application belongs to the currently authenticated beneficiary.
+     */
+    private void validateBeneficiaryOwnership(Application application, long currentUserId) {
+        Beneficiary beneficiary = application.getBeneficiary();
+        if (beneficiary.getUser() == null || beneficiary.getUser().getId() != currentUserId) {
+            throw new InvalidOperationException("You are not authorized to access this application's documents.");
+        }
+    }
+
+    /**
+     * Validates that a field or district officer can access documents for this application.
+     * The application must be in the officer's review stage AND the officer's region
+     * must match the beneficiary's region.
+     */
+    private void validateOfficerDocumentAccess(Application application, User officer,
+                                               Set<ApplicationStatus> allowedStatuses) {
+        if (!allowedStatuses.contains(application.getStatus())) {
+            throw new InvalidOperationException(
+                    "Application is not in your review stage. Current status: " + application.getStatus());
+        }
+
+        String beneficiaryRegion = application.getBeneficiary().getRegion();
+        String officerRegion = officer.getRegion();
+        if (beneficiaryRegion == null || officerRegion == null
+                || !beneficiaryRegion.equalsIgnoreCase(officerRegion)) {
+            throw new InvalidOperationException(
+                    "This application is not in your assigned region.");
+        }
     }
 
     private DocumentResponseDto toDto(Document d) {
