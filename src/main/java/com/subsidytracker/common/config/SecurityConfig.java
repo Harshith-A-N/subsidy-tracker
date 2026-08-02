@@ -1,5 +1,6 @@
 package com.subsidytracker.common.config;
 
+import com.subsidytracker.security.filter.JwtAuthenticationFilter;
 import com.subsidytracker.security.service.CustomUserDetailsService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,15 +15,19 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
     private final CustomUserDetailsService customUserDetailsService;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
-    public SecurityConfig(CustomUserDetailsService customUserDetailsService) {
+    public SecurityConfig(CustomUserDetailsService customUserDetailsService,
+                          JwtAuthenticationFilter jwtAuthenticationFilter) {
         this.customUserDetailsService = customUserDetailsService;
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
     }
 
     @Bean
@@ -45,7 +50,7 @@ public class SecurityConfig {
     }
 
     /**
-     * Security filter chain with role-based URL protection.
+     * Security filter chain with role-based URL protection and JWT filter.
      *
      * - Auth endpoints (register/login) are fully public.
      * - Scheme management (POST, PUT, DELETE) restricted to ADMIN.
@@ -54,7 +59,8 @@ public class SecurityConfig {
      * - Manual eligibility recalculation restricted to ADMIN.
      * - All other endpoints require authentication (any role).
      * - CSRF disabled: pure REST API, no browser form submissions.
-     * - Stateless sessions: each request must carry its own credentials (HTTP Basic).
+     * - Stateless sessions: token carried in Authorization header.
+     * - JwtAuthenticationFilter added before UsernamePasswordAuthenticationFilter.
      */
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -88,6 +94,7 @@ public class SecurityConfig {
                 // Everything else requires authentication (any role)
                 .anyRequest().authenticated()
             )
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
             .httpBasic(Customizer.withDefaults());
 
         return http.build();

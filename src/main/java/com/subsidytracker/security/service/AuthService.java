@@ -19,13 +19,16 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
+    private final JwtService jwtService;
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
-                       AuthenticationManager authenticationManager) {
+                       AuthenticationManager authenticationManager,
+                       JwtService jwtService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
+        this.jwtService = jwtService;
     }
 
     /**
@@ -51,18 +54,21 @@ public class AuthService {
 
         User saved = userRepository.save(user);
 
+        String token = jwtService.generateToken(saved.getEmail());
+
         return new AuthResponseDto(
                 saved.getId(),
                 saved.getEmail(),
                 saved.getFullName(),
                 saved.getRole(),
+                token,
                 "Registration successful."
         );
     }
 
     /**
      * Authenticates a user (any role) via Spring Security's AuthenticationManager.
-     * On success, returns the user's identity and role.
+     * On success, returns the user's identity, role, and JWT token.
      * On failure, Spring Security throws AuthenticationException (handled by default).
      */
     public AuthResponseDto login(LoginRequestDto request) {
@@ -79,11 +85,14 @@ public class AuthService {
                 .orElseThrow(() -> new InvalidOperationException(
                         "User not found after successful authentication."));
 
+        String token = jwtService.generateToken(user.getEmail());
+
         return new AuthResponseDto(
                 user.getId(),
                 user.getEmail(),
                 user.getFullName(),
                 user.getRole(),
+                token,
                 "Login successful."
         );
     }
