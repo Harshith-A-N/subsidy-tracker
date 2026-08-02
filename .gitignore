@@ -61,6 +61,9 @@ replay_pid*
 .DS_Store
 Thumbs.db
 
-# Local environment / secrets (add later when you have DB credentials)
+# Local environment / secrets (DB credentials, local configs, JWT secrets)
 application-local.properties
-.env
+src/main/resources/application-local.properties
+application.properties
+src/main/resources/application.properties
+.env
