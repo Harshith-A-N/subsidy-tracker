@@ -16,30 +16,20 @@ public class ComplianceMilestoneController {
 
     public ComplianceMilestoneController(
             ComplianceMilestoneService complianceMilestoneService) {
-
-        this.complianceMilestoneService =
-                complianceMilestoneService;
+        this.complianceMilestoneService = complianceMilestoneService;
     }
 
-    /**
-     * Create compliance milestones for an application.
-     */
     @PostMapping("/application/{applicationId}")
-    public ResponseEntity<List<DisbursementMilestone>>
-    createMilestones(@PathVariable Long applicationId) {
+    public ResponseEntity<List<DisbursementMilestone>> createMilestones(
+            @PathVariable Long applicationId) {
 
         return ResponseEntity
                 .status(HttpStatus.CREATED)
-                .body(complianceMilestoneService
-                        .createMilestones(applicationId));
+                .body(complianceMilestoneService.createMilestones(applicationId));
     }
 
-    /**
-     * Get all milestones for an application.
-     */
     @GetMapping("/application/{applicationId}")
-    public ResponseEntity<List<DisbursementMilestone>>
-    getApplicationMilestones(
+    public ResponseEntity<List<DisbursementMilestone>> getApplicationMilestones(
             @PathVariable Long applicationId) {
 
         return ResponseEntity.ok(
@@ -47,39 +37,25 @@ public class ComplianceMilestoneController {
                         .getApplicationMilestones(applicationId));
     }
 
-    /**
-     * Complete a compliance milestone.
-     */
     @PutMapping("/{milestoneId}/complete")
-    public ResponseEntity<DisbursementMilestone>
-    completeMilestone(@PathVariable Long milestoneId) {
+    public ResponseEntity<DisbursementMilestone> completeMilestone(
+            @PathVariable Long milestoneId) {
 
         return ResponseEntity.ok(
-                complianceMilestoneService
-                        .completeMilestone(milestoneId));
+                complianceMilestoneService.completeMilestone(milestoneId));
     }
 
-    /**
-     * Get all pending milestones.
-     */
     @GetMapping("/pending")
-    public ResponseEntity<List<DisbursementMilestone>>
-    getPendingMilestones() {
+    public ResponseEntity<List<DisbursementMilestone>> getPendingMilestones() {
 
         return ResponseEntity.ok(
-                complianceMilestoneService
-                        .getPendingMilestones());
+                complianceMilestoneService.getPendingMilestones());
     }
 
-    /**
-     * Get all overdue milestones.
-     */
     @GetMapping("/overdue")
-    public ResponseEntity<List<DisbursementMilestone>>
-    getOverdueMilestones() {
+    public ResponseEntity<List<DisbursementMilestone>> getOverdueMilestones() {
 
         return ResponseEntity.ok(
-                complianceMilestoneService
-                        .getOverdueMilestones());
+                complianceMilestoneService.getOverdueMilestones());
     }
 }
