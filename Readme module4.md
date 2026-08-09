@@ -115,13 +115,3 @@ implementations:
 
 Nothing in `DashboardController`, `ReportService`, or `dashboard/index.html` needs
 to change — they only depend on the `AnalyticsDataSource` interface.
-
-## Troubleshooting
-
-| Symptom | Fix |
-|---|---|
-| `Failed to configure a DataSource` on startup | `application-local.properties` is missing or in the wrong folder. It must sit directly in `src/main/resources/`, and the resource-copy log line should read "Copying 2 resources", not 1. |
-| `package com.lowagie.text does not exist` / POI class not found at compile time | Your `pom.xml` is missing the POI/OpenPDF `<dependency>` blocks — check they're present inside `<dependencies>...</dependencies>`, then rerun. Needs internet access to Maven Central on first build. |
-| `Column 'region' cannot be null` or `Data truncated for column 'role'` on register | Stale local DB schema from before some column/enum was widened. Fix with: `DROP DATABASE IF EXISTS subsidy_tracker_db;` then restart the app to let Hibernate recreate it, or `ALTER TABLE users MODIFY role ENUM(...) NOT NULL;` / `ALTER TABLE users MODIFY region VARCHAR(255) NULL;` to patch in place. |
-| Dashboard page loads but charts stay empty / 401 errors | Token missing, expired, or not pasted into the box. Re-login and re-paste. |
-| Register request returns `full_name` null even though you sent it | In Postman, Body tab → raw → make sure the dropdown is set to **JSON**, not Text, so `Content-Type: application/json` actually gets sent. |
