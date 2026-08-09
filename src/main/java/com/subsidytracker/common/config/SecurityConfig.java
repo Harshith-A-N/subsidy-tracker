@@ -74,6 +74,11 @@ public class SecurityConfig {
                 // Public — registration and login
                 .requestMatchers("/api/v1/auth/**").permitAll()
 
+                // Public — static dashboard page itself (Module 4). The page's JS
+                // calls the /api/v1/dashboard/** and /api/v1/reports/** endpoints
+                // below with a Bearer token, so the API calls are still authenticated.
+                .requestMatchers("/dashboard/**").permitAll()
+
                 // Scheme management — ADMIN only
                 .requestMatchers(HttpMethod.POST, "/api/v1/schemes/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/v1/schemes/**").hasRole("ADMIN")
