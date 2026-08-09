@@ -39,4 +39,10 @@ public class Scheme {
 
     @Column(name = "required_documents", length = 1000)
     private String requiredDocuments; // comma-separated list, e.g. "AADHAR,INCOME_CERTIFICATE,ADDRESS_PROOF"
+
+    @Column(name = "grant_amount", nullable = false, precision = 15, scale = 2)
+private BigDecimal grantAmount;
+
+@Column(name = "total_budget", nullable = false, precision = 15, scale = 2)
+private BigDecimal totalBudget;
 }
