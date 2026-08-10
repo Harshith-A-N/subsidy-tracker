@@ -1,7 +1,10 @@
 package com.subsidytracker.disbursement.service;
 
 import com.subsidytracker.common.entity.Application;
+import com.subsidytracker.common.entity.Beneficiary;
 import com.subsidytracker.common.entity.Scheme;
+import com.subsidytracker.common.entity.SchemeSlab;
+import com.subsidytracker.common.enums.BeneficiaryCategory;
 import com.subsidytracker.common.enums.DisbursementScheduleStatus;
 import com.subsidytracker.common.enums.TriggerMilestone;
 import com.subsidytracker.common.exception.InvalidOperationException;
@@ -13,6 +16,7 @@ import com.subsidytracker.disbursement.repository.ApplicationDisbursementSchedul
 import com.subsidytracker.disbursement.repository.DisbursementPlanRepository;
 import com.subsidytracker.disbursement.repository.DisbursementStageRepository;
 import com.subsidytracker.eligibility.repository.ApplicationRepository;
+import com.subsidytracker.scheme.repository.SchemeSlabRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +40,8 @@ class ScheduleGenerationServiceTest {
     @Mock private DisbursementPlanRepository planRepository;
     @Mock private DisbursementStageRepository stageRepository;
     @Mock private ApplicationDisbursementScheduleRepository scheduleRepository;
+    @Mock private ComplianceMilestoneService complianceMilestoneService;
+    @Mock private SchemeSlabRepository schemeSlabRepository;
 
     @InjectMocks
     private ScheduleGenerationService scheduleGenerationService;
@@ -43,6 +49,7 @@ class ScheduleGenerationServiceTest {
     private Application application;
     private Scheme scheme;
     private DisbursementPlan plan;
+    private Beneficiary beneficiary;
 
     @BeforeEach
     void setUp() {
@@ -50,9 +57,13 @@ class ScheduleGenerationServiceTest {
         scheme.setId(1L);
         scheme.setName("Solar Scheme");
 
+        beneficiary = new Beneficiary();
+        beneficiary.setCategory(BeneficiaryCategory.GENERAL);
+
         application = new Application();
         application.setId(100L);
         application.setScheme(scheme);
+        application.setBeneficiary(beneficiary);
 
         plan = new DisbursementPlan();
         plan.setId(5L);
@@ -66,6 +77,11 @@ class ScheduleGenerationServiceTest {
     void generateSchedule_success() {
         List<DisbursementStage> stages = twoStages();
         List<ApplicationDisbursementSchedule> expectedSchedules = buildExpectedSchedules(application, stages);
+
+        SchemeSlab slab = new SchemeSlab();
+        slab.setGrantAmount(new BigDecimal("100000.00"));
+        when(schemeSlabRepository.findBySchemeIdAndCategory(1L, BeneficiaryCategory.GENERAL))
+                .thenReturn(Optional.of(slab));
 
         when(applicationRepository.findById(100L)).thenReturn(Optional.of(application));
         when(planRepository.findBySchemeId(1L)).thenReturn(Optional.of(plan));
@@ -126,6 +142,11 @@ class ScheduleGenerationServiceTest {
     @Test
     void generateSchedule_eachEntryIsInitializedWithPendingStatus() {
         List<DisbursementStage> stages = twoStages();
+
+        SchemeSlab slab = new SchemeSlab();
+        slab.setGrantAmount(new BigDecimal("100000.00"));
+        when(schemeSlabRepository.findBySchemeIdAndCategory(1L, BeneficiaryCategory.GENERAL))
+                .thenReturn(Optional.of(slab));
 
         when(applicationRepository.findById(100L)).thenReturn(Optional.of(application));
         when(planRepository.findBySchemeId(1L)).thenReturn(Optional.of(plan));
