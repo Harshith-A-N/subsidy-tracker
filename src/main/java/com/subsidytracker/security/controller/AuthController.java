@@ -4,6 +4,7 @@ import com.subsidytracker.security.dto.AuthResponseDto;
 import com.subsidytracker.security.dto.LoginRequestDto;
 import com.subsidytracker.security.dto.RegisterRequestDto;
 import com.subsidytracker.security.service.AuthService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -23,7 +24,7 @@ public class AuthController {
      * Role is server-assigned; the caller only provides fullName, email, password.
      */
     @PostMapping("/register")
-    public ResponseEntity<AuthResponseDto> register(@RequestBody RegisterRequestDto request) {
+    public ResponseEntity<AuthResponseDto> register(@Valid @RequestBody RegisterRequestDto request) {
         AuthResponseDto response = authService.registerBeneficiary(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -34,7 +35,7 @@ public class AuthController {
      * Spring Security throws 401 on bad credentials before this method returns.
      */
     @PostMapping("/login")
-    public ResponseEntity<AuthResponseDto> login(@RequestBody LoginRequestDto request) {
+    public ResponseEntity<AuthResponseDto> login(@Valid @RequestBody LoginRequestDto request) {
         AuthResponseDto response = authService.login(request);
         return ResponseEntity.ok(response);
     }
