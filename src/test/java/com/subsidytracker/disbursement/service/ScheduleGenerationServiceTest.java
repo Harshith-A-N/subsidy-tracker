@@ -36,6 +36,7 @@ class ScheduleGenerationServiceTest {
     @Mock private DisbursementPlanRepository planRepository;
     @Mock private DisbursementStageRepository stageRepository;
     @Mock private ApplicationDisbursementScheduleRepository scheduleRepository;
+    @Mock private com.subsidytracker.scheme.repository.SchemeSlabRepository schemeSlabRepository;
 
     @InjectMocks
     private ScheduleGenerationService scheduleGenerationService;
@@ -43,6 +44,8 @@ class ScheduleGenerationServiceTest {
     private Application application;
     private Scheme scheme;
     private DisbursementPlan plan;
+    private com.subsidytracker.common.entity.Beneficiary beneficiary;
+    private com.subsidytracker.common.entity.SchemeSlab slab;
 
     @BeforeEach
     void setUp() {
@@ -50,14 +53,21 @@ class ScheduleGenerationServiceTest {
         scheme.setId(1L);
         scheme.setName("Solar Scheme");
 
+        beneficiary = new com.subsidytracker.common.entity.Beneficiary();
+        beneficiary.setCategory(com.subsidytracker.common.enums.BeneficiaryCategory.GENERAL);
+
         application = new Application();
         application.setId(100L);
         application.setScheme(scheme);
+        application.setBeneficiary(beneficiary);
 
         plan = new DisbursementPlan();
         plan.setId(5L);
         plan.setScheme(scheme);
         plan.setNumberOfStages(2);
+
+        slab = new com.subsidytracker.common.entity.SchemeSlab();
+        slab.setGrantAmount(new BigDecimal("100000"));
     }
 
     // ======================== generateSchedule ========================
@@ -71,6 +81,7 @@ class ScheduleGenerationServiceTest {
         when(planRepository.findBySchemeId(1L)).thenReturn(Optional.of(plan));
         when(stageRepository.findByPlanIdOrderBySequenceNumberAsc(5L)).thenReturn(stages);
         when(scheduleRepository.existsByApplicationId(100L)).thenReturn(false);
+        when(schemeSlabRepository.findBySchemeIdAndCategory(1L, com.subsidytracker.common.enums.BeneficiaryCategory.GENERAL)).thenReturn(Optional.of(slab));
         when(scheduleRepository.saveAll(any())).thenReturn(expectedSchedules);
 
         List<ApplicationDisbursementSchedule> result = scheduleGenerationService.generateSchedule(100L);
@@ -124,6 +135,19 @@ class ScheduleGenerationServiceTest {
     }
 
     @Test
+    void generateSchedule_throwsWhenSchemeSlabNotFound() {
+        when(applicationRepository.findById(100L)).thenReturn(Optional.of(application));
+        when(planRepository.findBySchemeId(1L)).thenReturn(Optional.of(plan));
+        when(stageRepository.findByPlanIdOrderBySequenceNumberAsc(5L)).thenReturn(twoStages());
+        when(scheduleRepository.existsByApplicationId(100L)).thenReturn(false);
+        when(schemeSlabRepository.findBySchemeIdAndCategory(1L, com.subsidytracker.common.enums.BeneficiaryCategory.GENERAL)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> scheduleGenerationService.generateSchedule(100L))
+                .isInstanceOf(InvalidOperationException.class)
+                .hasMessageContaining("No SchemeSlab configured");
+    }
+
+    @Test
     void generateSchedule_eachEntryIsInitializedWithPendingStatus() {
         List<DisbursementStage> stages = twoStages();
 
@@ -131,6 +155,7 @@ class ScheduleGenerationServiceTest {
         when(planRepository.findBySchemeId(1L)).thenReturn(Optional.of(plan));
         when(stageRepository.findByPlanIdOrderBySequenceNumberAsc(5L)).thenReturn(stages);
         when(scheduleRepository.existsByApplicationId(100L)).thenReturn(false);
+        when(schemeSlabRepository.findBySchemeIdAndCategory(1L, com.subsidytracker.common.enums.BeneficiaryCategory.GENERAL)).thenReturn(Optional.of(slab));
         when(scheduleRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
 
         List<ApplicationDisbursementSchedule> result = scheduleGenerationService.generateSchedule(100L);
