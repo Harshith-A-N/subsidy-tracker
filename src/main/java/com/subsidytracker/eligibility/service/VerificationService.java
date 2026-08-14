@@ -11,6 +11,7 @@ import com.subsidytracker.common.enums.VerificationDecision;
 import com.subsidytracker.common.enums.VerificationLevel;
 import com.subsidytracker.common.exception.InvalidOperationException;
 import com.subsidytracker.common.exception.ResourceNotFoundException;
+import com.subsidytracker.disbursement.service.ScheduleGenerationService;
 import com.subsidytracker.eligibility.dto.VerificationRequestDto;
 import com.subsidytracker.eligibility.dto.VerificationResponseDto;
 import com.subsidytracker.eligibility.repository.ApplicationRepository;
@@ -37,15 +38,18 @@ public class VerificationService {
     private final VerificationRepository verificationRepository;
     private final UserRepository userRepository;
     private final SchemeSlabRepository schemeSlabRepository;
+    private final ScheduleGenerationService scheduleGenerationService;
 
     public VerificationService(ApplicationRepository applicationRepository,
                                VerificationRepository verificationRepository,
                                UserRepository userRepository,
-                               SchemeSlabRepository schemeSlabRepository) {
+                               SchemeSlabRepository schemeSlabRepository,
+                               ScheduleGenerationService scheduleGenerationService) {
         this.applicationRepository = applicationRepository;
         this.verificationRepository = verificationRepository;
         this.userRepository = userRepository;
         this.schemeSlabRepository = schemeSlabRepository;
+        this.scheduleGenerationService = scheduleGenerationService;
     }
 
     @Transactional
@@ -78,6 +82,10 @@ public class VerificationService {
         application.setStatus(newStatus);
         application.setRemarks(request.getRemarks());
         applicationRepository.save(application);
+
+        if (newStatus == ApplicationStatus.READY_FOR_DISBURSEMENT) {
+            scheduleGenerationService.generateSchedule(application.getId());
+        }
 
         VerificationResponseDto response = new VerificationResponseDto();
         response.setVerificationId(verification.getId());

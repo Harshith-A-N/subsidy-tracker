@@ -102,9 +102,9 @@ All tests verified using Maven test lifecycle.
 
 
 ### 11. Integration Notes
-- Schedule generation is intentionally implemented as an independent service.
-- The service is not yet invoked automatically because the application approval workflow belongs to another milestone/module.
-- Once the approval workflow is completed, generateSchedule(applicationId) should be called immediately after a successful application approval.
+- Schedule generation is implemented in `ScheduleGenerationService`.
+- Integrated automatic schedule generation into `VerificationService.processVerification(...)`: when Finance approval advances an application status to `READY_FOR_DISBURSEMENT`, `ScheduleGenerationService.generateSchedule(applicationId)` is automatically invoked within the same transaction.
+- The manual schedule-generation endpoint `POST /api/disbursement/schedules/generate/{applicationId}` remains available.
 
 ### 12. Future TODOs
 
