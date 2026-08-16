@@ -97,6 +97,7 @@ public class DisbursementController {
                     stage.setSequenceNumber(r.getSequenceNumber());
                     stage.setPercentageOfGrant(r.getPercentageOfGrant());
                     stage.setTriggerMilestone(r.getTriggerMilestone());
+                    stage.setDueDateOffsetDays(r.getDueDateOffsetDays());
                     return stage;
                 })
                 .toList();
@@ -124,6 +125,7 @@ public class DisbursementController {
         response.setSequenceNumber(stage.getSequenceNumber());
         response.setPercentageOfGrant(stage.getPercentageOfGrant());
         response.setTriggerMilestone(stage.getTriggerMilestone());
+        response.setDueDateOffsetDays(stage.getDueDateOffsetDays());
         return response;
     }
 

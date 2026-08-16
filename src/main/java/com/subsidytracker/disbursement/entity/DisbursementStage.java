@@ -40,4 +40,8 @@ public class DisbursementStage {
     @Enumerated(EnumType.STRING)
     @Column(name = "trigger_milestone", nullable = false)
     private TriggerMilestone triggerMilestone;
+
+    @NotNull
+    @Column(name = "due_date_offset_days", nullable = false)
+    private Integer dueDateOffsetDays;
 }

@@ -63,13 +63,16 @@ Implementation of Staged Disbursement Plan & Schedule Engine.
 - `scheduledAmount` is calculated using the applicable `SchemeSlab.grantAmount` resolved by scheme + beneficiary category.
 - Amount per stage: `SchemeSlab.grantAmount × stage.percentageOfGrant / 100` (BigDecimal, 2 decimal places, HALF_UP rounding).
 - Missing SchemeSlab for the application's scheme + beneficiary category throws `InvalidOperationException` (no silent fallback to zero or `Scheme.grantAmount`).
-- `dueDate` remains deferred — the disbursement timing policy is not yet defined.
+- `dueDate` is calculated automatically per stage: `generationDate + stage.dueDateOffsetDays`.
+- A single `generationDate` (the date schedule generation runs) is used as the base for all stages in a schedule.
+- If a stage has no configured `dueDateOffsetDays` (null), schedule generation fails with `InvalidOperationException` — no silent fallback to 0 or today's date.
+- Actual offset values are configuration data set per-stage in the disbursement plan, not hardcoded business rules.
 
 ### 8. DTOs
 - Created `DisbursementPlanRequest` (schemeId + stages list).
-- Created `DisbursementStageRequest` (stageName, sequenceNumber, percentageOfGrant, triggerMilestone).
+- Created `DisbursementStageRequest` (stageName, sequenceNumber, percentageOfGrant, triggerMilestone, dueDateOffsetDays).
 - Created `DisbursementPlanResponse` (id, schemeId, numberOfStages, createdById, createdAt, stages list).
-- Created `DisbursementStageResponse` (id, planId, stageName, sequenceNumber, percentageOfGrant, triggerMilestone).
+- Created `DisbursementStageResponse` (id, planId, stageName, sequenceNumber, percentageOfGrant, triggerMilestone, dueDateOffsetDays).
 - Created `ScheduleEntryResponse` (id, applicationId, stageId, stageName, stageSequenceNumber, scheduledAmount, dueDate, status).
 
 ### 9. Controllers
@@ -92,10 +95,10 @@ Implementation of Staged Disbursement Plan & Schedule Engine.
 Implemented unit tests for:
 
 - DisbursementPlanServiceTest
-  - 16 test cases covering creation flow, validation rules, duplicate prevention, and exception handling.
+  - 18 test cases covering creation flow, validation rules (including dueDateOffsetDays null/negative), duplicate prevention, and exception handling.
 
 - ScheduleGenerationServiceTest
-  - 8 test cases covering schedule generation, validation failures, duplicate prevention, and retrieval.
+  - 9 test cases covering schedule generation, validation failures, duplicate prevention, SchemeSlab resolution, and retrieval.
 
 Testing performed using JUnit and Mockito.
 All tests verified using Maven test lifecycle.
@@ -108,5 +111,4 @@ All tests verified using Maven test lifecycle.
 
 ### 12. Future TODOs
 
-- Calculate dueDate after disbursement policy is finalized.
 - Integrate schedule generation with the application approval workflow.
