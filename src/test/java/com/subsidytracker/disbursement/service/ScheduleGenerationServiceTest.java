@@ -1,7 +1,10 @@
 package com.subsidytracker.disbursement.service;
 
 import com.subsidytracker.common.entity.Application;
+import com.subsidytracker.common.entity.Beneficiary;
 import com.subsidytracker.common.entity.Scheme;
+import com.subsidytracker.common.entity.SchemeSlab;
+import com.subsidytracker.common.enums.BeneficiaryCategory;
 import com.subsidytracker.common.enums.DisbursementScheduleStatus;
 import com.subsidytracker.common.enums.TriggerMilestone;
 import com.subsidytracker.common.exception.InvalidOperationException;
@@ -13,6 +16,7 @@ import com.subsidytracker.disbursement.repository.ApplicationDisbursementSchedul
 import com.subsidytracker.disbursement.repository.DisbursementPlanRepository;
 import com.subsidytracker.disbursement.repository.DisbursementStageRepository;
 import com.subsidytracker.eligibility.repository.ApplicationRepository;
+import com.subsidytracker.scheme.repository.SchemeSlabRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,6 +25,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,7 +41,8 @@ class ScheduleGenerationServiceTest {
     @Mock private DisbursementPlanRepository planRepository;
     @Mock private DisbursementStageRepository stageRepository;
     @Mock private ApplicationDisbursementScheduleRepository scheduleRepository;
-    @Mock private com.subsidytracker.scheme.repository.SchemeSlabRepository schemeSlabRepository;
+    @Mock private ComplianceMilestoneService complianceMilestoneService;
+    @Mock private SchemeSlabRepository schemeSlabRepository;
 
     @InjectMocks
     private ScheduleGenerationService scheduleGenerationService;
@@ -44,8 +50,8 @@ class ScheduleGenerationServiceTest {
     private Application application;
     private Scheme scheme;
     private DisbursementPlan plan;
-    private com.subsidytracker.common.entity.Beneficiary beneficiary;
-    private com.subsidytracker.common.entity.SchemeSlab slab;
+    private Beneficiary beneficiary;
+    private SchemeSlab slab;
 
     @BeforeEach
     void setUp() {
@@ -53,8 +59,8 @@ class ScheduleGenerationServiceTest {
         scheme.setId(1L);
         scheme.setName("Solar Scheme");
 
-        beneficiary = new com.subsidytracker.common.entity.Beneficiary();
-        beneficiary.setCategory(com.subsidytracker.common.enums.BeneficiaryCategory.GENERAL);
+        beneficiary = new Beneficiary();
+        beneficiary.setCategory(BeneficiaryCategory.GENERAL);
 
         application = new Application();
         application.setId(100L);
@@ -77,11 +83,15 @@ class ScheduleGenerationServiceTest {
         List<DisbursementStage> stages = twoStages();
         List<ApplicationDisbursementSchedule> expectedSchedules = buildExpectedSchedules(application, stages);
 
+        SchemeSlab slab = new SchemeSlab();
+        slab.setGrantAmount(new BigDecimal("100000.00"));
+        when(schemeSlabRepository.findBySchemeIdAndCategory(1L, BeneficiaryCategory.GENERAL))
+                .thenReturn(Optional.of(slab));
+
         when(applicationRepository.findById(100L)).thenReturn(Optional.of(application));
         when(planRepository.findBySchemeId(1L)).thenReturn(Optional.of(plan));
         when(stageRepository.findByPlanIdOrderBySequenceNumberAsc(5L)).thenReturn(stages);
         when(scheduleRepository.existsByApplicationId(100L)).thenReturn(false);
-        when(schemeSlabRepository.findBySchemeIdAndCategory(1L, com.subsidytracker.common.enums.BeneficiaryCategory.GENERAL)).thenReturn(Optional.of(slab));
         when(scheduleRepository.saveAll(any())).thenReturn(expectedSchedules);
 
         List<ApplicationDisbursementSchedule> result = scheduleGenerationService.generateSchedule(100L);
@@ -89,6 +99,7 @@ class ScheduleGenerationServiceTest {
         assertThat(result).hasSize(2);
         assertThat(result).allMatch(s -> s.getStatus() == DisbursementScheduleStatus.PENDING);
         verify(scheduleRepository).saveAll(any());
+        verify(complianceMilestoneService).createMilestones(100L);
     }
 
     @Test
@@ -140,7 +151,7 @@ class ScheduleGenerationServiceTest {
         when(planRepository.findBySchemeId(1L)).thenReturn(Optional.of(plan));
         when(stageRepository.findByPlanIdOrderBySequenceNumberAsc(5L)).thenReturn(twoStages());
         when(scheduleRepository.existsByApplicationId(100L)).thenReturn(false);
-        when(schemeSlabRepository.findBySchemeIdAndCategory(1L, com.subsidytracker.common.enums.BeneficiaryCategory.GENERAL)).thenReturn(Optional.empty());
+        when(schemeSlabRepository.findBySchemeIdAndCategory(1L, BeneficiaryCategory.GENERAL)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> scheduleGenerationService.generateSchedule(100L))
                 .isInstanceOf(InvalidOperationException.class)
@@ -151,17 +162,36 @@ class ScheduleGenerationServiceTest {
     void generateSchedule_eachEntryIsInitializedWithPendingStatus() {
         List<DisbursementStage> stages = twoStages();
 
+        SchemeSlab slab = new SchemeSlab();
+        slab.setGrantAmount(new BigDecimal("100000.00"));
+        when(schemeSlabRepository.findBySchemeIdAndCategory(1L, BeneficiaryCategory.GENERAL))
+                .thenReturn(Optional.of(slab));
+
         when(applicationRepository.findById(100L)).thenReturn(Optional.of(application));
         when(planRepository.findBySchemeId(1L)).thenReturn(Optional.of(plan));
         when(stageRepository.findByPlanIdOrderBySequenceNumberAsc(5L)).thenReturn(stages);
         when(scheduleRepository.existsByApplicationId(100L)).thenReturn(false);
-        when(schemeSlabRepository.findBySchemeIdAndCategory(1L, com.subsidytracker.common.enums.BeneficiaryCategory.GENERAL)).thenReturn(Optional.of(slab));
         when(scheduleRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
 
         List<ApplicationDisbursementSchedule> result = scheduleGenerationService.generateSchedule(100L);
 
         assertThat(result).hasSize(2);
-        result.forEach(s -> assertThat(s.getStatus()).isEqualTo(DisbursementScheduleStatus.PENDING));
+        
+        // Assertions for Stage 1
+        ApplicationDisbursementSchedule s1 = result.get(0);
+        assertThat(s1.getStage().getId()).isEqualTo(1L);
+        assertThat(s1.getStatus()).isEqualTo(DisbursementScheduleStatus.PENDING);
+        assertThat(s1.getScheduledAmount()).isEqualByComparingTo(new BigDecimal("60000.00"));
+        assertThat(s1.getDueDate()).isEqualTo(LocalDate.now().plusDays(7));
+
+        // Assertions for Stage 2
+        ApplicationDisbursementSchedule s2 = result.get(1);
+        assertThat(s2.getStage().getId()).isEqualTo(2L);
+        assertThat(s2.getStatus()).isEqualTo(DisbursementScheduleStatus.PENDING);
+        assertThat(s2.getScheduledAmount()).isEqualByComparingTo(new BigDecimal("40000.00"));
+        assertThat(s2.getDueDate()).isEqualTo(LocalDate.now().plusDays(30));
+
+        verify(complianceMilestoneService).createMilestones(100L);
     }
 
     // ======================== getScheduleByApplication ========================

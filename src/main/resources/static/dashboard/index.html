@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Subsidy Tracker — Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* Palette reused from the team's earlier UI prototype (govgrant-portal) */
+:root{--primary:#4f46e5;--primary-dark:#3730a3;--primary-light:#818cf8;--secondary:#06b6d4;
+--success:#10b981;--warning:#f59e0b;--danger:#ef4444;--info:#3b82f6;--bg:#0b0f1a;
+--bg-card:#111827;--bg-surface:#1e293b;--border:#2d3748;--text:#f1f5f9;--text-muted:#94a3b8;
+--text-dim:#64748b;--grad-primary:linear-gradient(135deg,#4f46e5,#7c3aed);
+--radius:12px;--radius-lg:18px;--shadow-lg:0 8px 32px rgba(0,0,0,.5);}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Inter,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:28px}
+h1{font-size:22px;margin-bottom:4px}
+.sub{color:var(--text-muted);font-size:13px;margin-bottom:22px}
+.token-bar{display:flex;gap:8px;margin-bottom:24px;align-items:center}
+.token-bar input{flex:1;background:var(--bg-surface);border:1.5px solid var(--border);border-radius:10px;
+  padding:10px 14px;color:var(--text);font-size:13px;outline:none}
+.token-bar button{background:var(--grad-primary);color:#fff;border:none;border-radius:10px;padding:10px 18px;
+  font-weight:600;font-size:13px;cursor:pointer}
+#status{font-size:12px;color:var(--text-dim);margin-left:6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.stat-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);
+  padding:20px;position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--primary)}
+.stat-card.success::before{background:var(--success)}
+.stat-card.warning::before{background:var(--warning)}
+.stat-card.danger::before{background:var(--danger)}
+.stat-label{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);margin-bottom:8px}
+.stat-value{font-size:26px;font-weight:700}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+@media(max-width:900px){.row2{grid-template-columns:1fr}}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:22px}
+.card h2{font-size:15px;margin-bottom:14px;color:var(--text)}
+canvas{max-height:280px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--text-muted);font-weight:600;padding:8px 6px;border-bottom:1px solid var(--border);
+  font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+td{padding:9px 6px;border-bottom:1px solid rgba(255,255,255,.04)}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-danger{background:rgba(239,68,68,.15);color:var(--danger)}
+.badge-warning{background:rgba(245,158,11,.15);color:var(--warning)}
+.badge-ok{background:rgba(16,185,129,.15);color:var(--success)}
+.reports{display:flex;gap:10px;flex-wrap:wrap}
+.reports button{background:var(--bg-surface);border:1.5px solid var(--border);color:var(--text);
+  border-radius:10px;padding:10px 16px;font-size:13px;cursor:pointer;font-weight:600}
+.reports button:hover{border-color:var(--primary-light);color:var(--primary-light)}
+.mock-note{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:var(--warning);
+  border-radius:10px;padding:10px 14px;font-size:12px;margin-bottom:20px}
+</style>
+</head>
+<body>
+
+<h1>Subsidy Tracker — Dashboard</h1>
+<div class="sub">Fund utilization, compliance &amp; regional analytics</div>
+
+<div class="mock-note">Running on mock analytics data until Person 3's analytics module is merged. Numbers here are placeholders, not live figures.</div>
+
+<div class="token-bar">
+  <input id="tokenInput" type="text" placeholder="Paste JWT (login via /api/v1/auth/login), then click Load"/>
+  <button onclick="loadAll()">Load Dashboard</button>
+  <span id="status"></span>
+</div>
+
+<div class="grid" id="overviewCards"></div>
+
+<div class="row2">
+  <div class="card">
+    <h2>Fund Utilization by Scheme</h2>
+    <canvas id="schemeChart"></canvas>
+  </div>
+  <div class="card">
+    <h2>Fund Utilization by Region</h2>
+    <canvas id="regionChart"></canvas>
+  </div>
+</div>
+
+<div class="row2">
+  <div class="card">
+    <h2>Beneficiary Category Distribution</h2>
+    <canvas id="categoryChart"></canvas>
+  </div>
+  <div class="card">
+    <h2>Budget Exhaustion Warnings</h2>
+    <table>
+      <thead><tr><th>Scheme</th><th>Region</th><th>Utilization</th><th>Status</th></tr></thead>
+      <tbody id="warningsBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <h2>Non-Compliance by Region</h2>
+  <table>
+    <thead><tr><th>Scheme</th><th>Region</th><th>Non-Compliant Count</th></tr></thead>
+    <tbody id="nonComplianceBody"></tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Reports</h2>
+  <div class="reports">
+    <button onclick="downloadReport('/api/v1/reports/schemes/excel','scheme-summary.xlsx')">⬇ Scheme Summary (Excel)</button>
+    <button onclick="downloadReport('/api/v1/reports/schemes/pdf','scheme-summary.pdf')">⬇ Scheme Summary (PDF)</button>
+    <button onclick="downloadReport('/api/v1/reports/regions/excel','regional-summary.xlsx')">⬇ Regional Summary (Excel)</button>
+    <button onclick="downloadReport('/api/v1/reports/regions/pdf','regional-summary.pdf')">⬇ Regional Summary (PDF)</button>
+  </div>
+</div>
+
+<script>
+let schemeChartInstance, regionChartInstance, categoryChartInstance;
+
+function authHeaders() {
+  const token = document.getElementById('tokenInput').value.trim();
+  return token ? { 'Authorization': 'Bearer ' + token } : {};
+}
+
+async function getJson(path) {
+  const res = await fetch(path, { headers: authHeaders() });
+  if (!res.ok) throw new Error(path + ' -> ' + res.status);
+  return res.json();
+}
+
+async function loadAll() {
+  const status = document.getElementById('status');
+  status.textContent = 'Loading...';
+  try {
+    const [overview, schemes, regions, warnings, nonCompliance, categories] = await Promise.all([
+      getJson('/api/v1/dashboard/overview'),
+      getJson('/api/v1/dashboard/fund-utilization/schemes'),
+      getJson('/api/v1/dashboard/fund-utilization/regions'),
+      getJson('/api/v1/dashboard/budget-exhaustion-warnings'),
+      getJson('/api/v1/dashboard/compliance/non-compliance'),
+      getJson('/api/v1/dashboard/beneficiary-category-distribution'),
+    ]);
+    renderOverview(overview);
+    renderSchemeChart(schemes);
+    renderRegionChart(regions);
+    renderCategoryChart(categories);
+    renderWarnings(warnings);
+    renderNonCompliance(nonCompliance);
+    status.textContent = 'Loaded ' + new Date().toLocaleTimeString();
+  } catch (e) {
+    status.textContent = 'Failed: ' + e.message + ' (check token / that the backend is running)';
+  }
+}
+
+function renderOverview(o) {
+  const cards = [
+    { label: 'Total Applications', value: o.totalApplications, cls: '' },
+    { label: 'Approved', value: o.approvedApplications, cls: 'success' },
+    { label: 'Pending', value: o.pendingApplications, cls: 'warning' },
+    { label: 'Rejected', value: o.rejectedApplications, cls: 'danger' },
+    { label: 'Budget Allocated', value: '₹' + Number(o.totalBudgetAllocated).toLocaleString('en-IN'), cls: '' },
+    { label: 'Budget Utilized', value: '₹' + Number(o.totalBudgetUtilized).toLocaleString('en-IN'), cls: 'success' },
+    { label: 'Overdue Milestones', value: o.overdueMilestones, cls: 'danger' },
+  ];
+  document.getElementById('overviewCards').innerHTML = cards.map(c => `
+    <div class="stat-card ${c.cls}">
+      <div class="stat-label">${c.label}</div>
+      <div class="stat-value">${c.value}</div>
+    </div>`).join('');
+}
+
+function renderSchemeChart(data) {
+  const ctx = document.getElementById('schemeChart');
+  if (schemeChartInstance) schemeChartInstance.destroy();
+  schemeChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: data.map(d => d.schemeName),
+      datasets: [{ label: 'Utilization %', data: data.map(d => d.utilizationPercent), backgroundColor: '#4f46e5' }]
+    },
+    options: { scales: { y: { beginAtZero: true, max: 100 } }, plugins: { legend: { display: false } } }
+  });
+}
+
+function renderRegionChart(data) {
+  const ctx = document.getElementById('regionChart');
+  if (regionChartInstance) regionChartInstance.destroy();
+  regionChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: data.map(d => d.regionName),
+      datasets: [{ label: 'Utilization %', data: data.map(d => d.utilizationPercent), backgroundColor: '#06b6d4' }]
+    },
+    options: { scales: { y: { beginAtZero: true, max: 100 } }, plugins: { legend: { display: false } } }
+  });
+}
+
+function renderCategoryChart(data) {
+  const ctx = document.getElementById('categoryChart');
+  if (categoryChartInstance) categoryChartInstance.destroy();
+  categoryChartInstance = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: data.map(d => d.category),
+      datasets: [{ data: data.map(d => d.count),
+        backgroundColor: ['#4f46e5','#10b981','#f59e0b','#ef4444','#06b6d4'] }]
+    }
+  });
+}
+
+function renderWarnings(data) {
+  const badgeClass = s => s === 'CRITICAL' ? 'badge-danger' : s === 'WARNING' ? 'badge-warning' : 'badge-ok';
+  document.getElementById('warningsBody').innerHTML = data.map(w => `
+    <tr>
+      <td>${w.schemeName}</td>
+      <td>${w.regionName}</td>
+      <td>${w.utilizationPercent.toFixed(1)}%</td>
+      <td><span class="badge ${badgeClass(w.severity)}">${w.severity}</span></td>
+    </tr>`).join('');
+}
+
+function renderNonCompliance(data) {
+  document.getElementById('nonComplianceBody').innerHTML = data.map(n => `
+    <tr><td>${n.schemeName}</td><td>${n.regionName}</td><td>${n.nonCompliantCount}</td></tr>`).join('');
+}
+
+async function downloadReport(path, filename) {
+  const res = await fetch(path, { headers: authHeaders() });
+  if (!res.ok) { alert('Download failed: ' + res.status); return; }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>

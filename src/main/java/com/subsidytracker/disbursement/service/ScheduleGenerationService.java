@@ -26,17 +26,19 @@ public class ScheduleGenerationService {
 
     private final ApplicationRepository applicationRepository;
     private final DisbursementPlanRepository planRepository;
+    private final ComplianceMilestoneService complianceMilestoneService;
     private final DisbursementStageRepository stageRepository;
     private final ApplicationDisbursementScheduleRepository scheduleRepository;
     private final SchemeSlabRepository schemeSlabRepository;
 
     public ScheduleGenerationService(ApplicationRepository applicationRepository,
-                                     DisbursementPlanRepository planRepository,
+                                     DisbursementPlanRepository planRepository, ComplianceMilestoneService complianceMilestoneService,
                                      DisbursementStageRepository stageRepository,
                                      ApplicationDisbursementScheduleRepository scheduleRepository,
                                      SchemeSlabRepository schemeSlabRepository) {
         this.applicationRepository = applicationRepository;
         this.planRepository = planRepository;
+        this.complianceMilestoneService = complianceMilestoneService;
         this.stageRepository = stageRepository;
         this.scheduleRepository = scheduleRepository;
         this.schemeSlabRepository = schemeSlabRepository;
@@ -58,7 +60,13 @@ public class ScheduleGenerationService {
         LocalDate generationDate = LocalDate.now();
 
         List<ApplicationDisbursementSchedule> schedules = buildSchedules(application, stages, applicableGrantAmount, generationDate);
-        return scheduleRepository.saveAll(schedules);
+
+        List<ApplicationDisbursementSchedule> savedSchedules =
+                scheduleRepository.saveAll(schedules);
+
+        complianceMilestoneService.createMilestones(applicationId);
+
+        return savedSchedules;
     }
 
     public List<ApplicationDisbursementSchedule> getScheduleByApplication(Long applicationId) {
