@@ -154,6 +154,14 @@ public class DisbursementPlanService {
                 throw new InvalidOperationException(
                         "Trigger milestone is required for each stage. Stage '" + stage.getStageName() + "' has no trigger milestone.");
             }
+            if (stage.getDueDateOffsetDays() == null) {
+                throw new InvalidOperationException(
+                        "Due date offset days cannot be null. Stage '" + stage.getStageName() + "' has no configured offset.");
+            }
+            if (stage.getDueDateOffsetDays() < 0) {
+                throw new InvalidOperationException(
+                        "Due date offset days must be non-negative. Found: " + stage.getDueDateOffsetDays() + " for stage '" + stage.getStageName() + "'.");
+            }
         }
 
         // Validate stage percentages total exactly 100%

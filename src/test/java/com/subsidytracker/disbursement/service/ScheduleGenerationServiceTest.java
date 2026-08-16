@@ -202,6 +202,7 @@ class ScheduleGenerationServiceTest {
         s1.setSequenceNumber(1);
         s1.setPercentageOfGrant(new BigDecimal("60"));
         s1.setTriggerMilestone(TriggerMilestone.APPLICATION_APPROVAL);
+        s1.setDueDateOffsetDays(7);
 
         DisbursementStage s2 = new DisbursementStage();
         s2.setId(2L);
@@ -210,6 +211,7 @@ class ScheduleGenerationServiceTest {
         s2.setSequenceNumber(2);
         s2.setPercentageOfGrant(new BigDecimal("40"));
         s2.setTriggerMilestone(TriggerMilestone.PROJECT_CLOSURE);
+        s2.setDueDateOffsetDays(30);
 
         return List.of(s1, s2);
     }

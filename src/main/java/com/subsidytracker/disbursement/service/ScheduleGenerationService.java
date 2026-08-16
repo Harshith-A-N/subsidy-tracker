@@ -55,7 +55,9 @@ public class ScheduleGenerationService {
 
         BigDecimal applicableGrantAmount = resolveGrantAmount(application);
 
-        List<ApplicationDisbursementSchedule> schedules = buildSchedules(application, stages, applicableGrantAmount);
+        LocalDate generationDate = LocalDate.now();
+
+        List<ApplicationDisbursementSchedule> schedules = buildSchedules(application, stages, applicableGrantAmount, generationDate);
         return scheduleRepository.saveAll(schedules);
     }
 
@@ -113,15 +115,17 @@ public class ScheduleGenerationService {
 
     private List<ApplicationDisbursementSchedule> buildSchedules(Application application,
                                                                   List<DisbursementStage> stages,
-                                                                  BigDecimal grantAmount) {
+                                                                  BigDecimal grantAmount,
+                                                                  LocalDate generationDate) {
         return stages.stream()
-                .map(stage -> buildScheduleEntry(application, stage, grantAmount))
+                .map(stage -> buildScheduleEntry(application, stage, grantAmount, generationDate))
                 .toList();
     }
 
     private ApplicationDisbursementSchedule buildScheduleEntry(Application application,
                                                                 DisbursementStage stage,
-                                                                BigDecimal grantAmount) {
+                                                                BigDecimal grantAmount,
+                                                                LocalDate generationDate) {
         ApplicationDisbursementSchedule schedule = new ApplicationDisbursementSchedule();
         schedule.setApplication(application);
         schedule.setStage(stage);
@@ -132,9 +136,12 @@ public class ScheduleGenerationService {
                 .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
         schedule.setScheduledAmount(scheduledAmount);
 
-        // TODO: Calculate actual dueDate based on the approval date and stage trigger policy.
-        //       Final logic depends on the disbursement policy to be defined in a later milestone.
-        schedule.setDueDate(LocalDate.now());
+        if (stage.getDueDateOffsetDays() == null) {
+            throw new InvalidOperationException(
+                    "Stage '" + stage.getStageName() + "' has no configured dueDateOffsetDays. "
+                            + "Cannot generate schedule without a due-date offset.");
+        }
+        schedule.setDueDate(generationDate.plusDays(stage.getDueDateOffsetDays()));
 
         return schedule;
     }

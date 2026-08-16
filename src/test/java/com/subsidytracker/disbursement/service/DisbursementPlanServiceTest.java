@@ -115,8 +115,8 @@ class DisbursementPlanServiceTest {
     @Test
     void createPlan_throwsWhenPercentagesTotalIsNotHundred() {
         List<DisbursementStage> stages = List.of(
-                stage("Stage A", 1, new BigDecimal("60"), TriggerMilestone.APPLICATION_APPROVAL),
-                stage("Stage B", 2, new BigDecimal("30"), TriggerMilestone.GROUND_VERIFICATION)
+                stage("Stage A", 1, new BigDecimal("60"), TriggerMilestone.APPLICATION_APPROVAL, 7),
+                stage("Stage B", 2, new BigDecimal("30"), TriggerMilestone.GROUND_VERIFICATION, 14)
         );
 
         when(schemeRepository.findById(1L)).thenReturn(Optional.of(scheme));
@@ -130,7 +130,7 @@ class DisbursementPlanServiceTest {
     @Test
     void createPlan_throwsWhenPercentageIsZero() {
         List<DisbursementStage> stages = List.of(
-                stage("Stage A", 1, BigDecimal.ZERO, TriggerMilestone.APPLICATION_APPROVAL)
+                stage("Stage A", 1, BigDecimal.ZERO, TriggerMilestone.APPLICATION_APPROVAL, 7)
         );
 
         when(schemeRepository.findById(1L)).thenReturn(Optional.of(scheme));
@@ -144,7 +144,7 @@ class DisbursementPlanServiceTest {
     @Test
     void createPlan_throwsWhenPercentageIsNull() {
         List<DisbursementStage> stages = List.of(
-                stage("Stage A", 1, null, TriggerMilestone.APPLICATION_APPROVAL)
+                stage("Stage A", 1, null, TriggerMilestone.APPLICATION_APPROVAL, 7)
         );
 
         when(schemeRepository.findById(1L)).thenReturn(Optional.of(scheme));
@@ -158,7 +158,7 @@ class DisbursementPlanServiceTest {
     @Test
     void createPlan_throwsWhenPercentageExceedsHundred() {
         List<DisbursementStage> stages = List.of(
-                stage("Stage A", 1, new BigDecimal("150"), TriggerMilestone.APPLICATION_APPROVAL)
+                stage("Stage A", 1, new BigDecimal("150"), TriggerMilestone.APPLICATION_APPROVAL, 7)
         );
 
         when(schemeRepository.findById(1L)).thenReturn(Optional.of(scheme));
@@ -174,7 +174,7 @@ class DisbursementPlanServiceTest {
     @Test
     void createPlan_throwsWhenSequenceNumberIsNull() {
         List<DisbursementStage> stages = List.of(
-                stage("Stage A", null, new BigDecimal("100"), TriggerMilestone.APPLICATION_APPROVAL)
+                stage("Stage A", null, new BigDecimal("100"), TriggerMilestone.APPLICATION_APPROVAL, 7)
         );
 
         when(schemeRepository.findById(1L)).thenReturn(Optional.of(scheme));
@@ -188,7 +188,7 @@ class DisbursementPlanServiceTest {
     @Test
     void createPlan_throwsWhenSequenceNumberIsZeroOrNegative() {
         List<DisbursementStage> stages = List.of(
-                stage("Stage A", 0, new BigDecimal("100"), TriggerMilestone.APPLICATION_APPROVAL)
+                stage("Stage A", 0, new BigDecimal("100"), TriggerMilestone.APPLICATION_APPROVAL, 7)
         );
 
         when(schemeRepository.findById(1L)).thenReturn(Optional.of(scheme));
@@ -202,8 +202,8 @@ class DisbursementPlanServiceTest {
     @Test
     void createPlan_throwsOnDuplicateSequenceNumbers() {
         List<DisbursementStage> stages = List.of(
-                stage("Stage A", 1, new BigDecimal("50"), TriggerMilestone.APPLICATION_APPROVAL),
-                stage("Stage B", 1, new BigDecimal("50"), TriggerMilestone.GROUND_VERIFICATION)
+                stage("Stage A", 1, new BigDecimal("50"), TriggerMilestone.APPLICATION_APPROVAL, 7),
+                stage("Stage B", 1, new BigDecimal("50"), TriggerMilestone.GROUND_VERIFICATION, 14)
         );
 
         when(schemeRepository.findById(1L)).thenReturn(Optional.of(scheme));
@@ -219,8 +219,8 @@ class DisbursementPlanServiceTest {
     @Test
     void createPlan_throwsOnDuplicateStageNames() {
         List<DisbursementStage> stages = List.of(
-                stage("Release", 1, new BigDecimal("50"), TriggerMilestone.APPLICATION_APPROVAL),
-                stage("Release", 2, new BigDecimal("50"), TriggerMilestone.GROUND_VERIFICATION)
+                stage("Release", 1, new BigDecimal("50"), TriggerMilestone.APPLICATION_APPROVAL, 7),
+                stage("Release", 2, new BigDecimal("50"), TriggerMilestone.GROUND_VERIFICATION, 14)
         );
 
         when(schemeRepository.findById(1L)).thenReturn(Optional.of(scheme));
@@ -236,7 +236,7 @@ class DisbursementPlanServiceTest {
     @Test
     void createPlan_throwsWhenTriggerMilestoneIsNull() {
         List<DisbursementStage> stages = List.of(
-                stage("Stage A", 1, new BigDecimal("100"), null)
+                stage("Stage A", 1, new BigDecimal("100"), null, 7)
         );
 
         when(schemeRepository.findById(1L)).thenReturn(Optional.of(scheme));
@@ -245,6 +245,36 @@ class DisbursementPlanServiceTest {
         assertThatThrownBy(() -> planService.createPlan(1L, 10L, stages))
                 .isInstanceOf(InvalidOperationException.class)
                 .hasMessageContaining("Trigger milestone is required");
+    }
+
+    // ======================== validateStages – dueDateOffsetDays ========================
+
+    @Test
+    void createPlan_throwsWhenDueDateOffsetDaysIsNull() {
+        List<DisbursementStage> stages = List.of(
+                stage("Stage A", 1, new BigDecimal("100"), TriggerMilestone.APPLICATION_APPROVAL, null)
+        );
+
+        when(schemeRepository.findById(1L)).thenReturn(Optional.of(scheme));
+        when(planRepository.findBySchemeId(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> planService.createPlan(1L, 10L, stages))
+                .isInstanceOf(InvalidOperationException.class)
+                .hasMessageContaining("Due date offset days cannot be null");
+    }
+
+    @Test
+    void createPlan_throwsWhenDueDateOffsetDaysIsNegative() {
+        List<DisbursementStage> stages = List.of(
+                stage("Stage A", 1, new BigDecimal("100"), TriggerMilestone.APPLICATION_APPROVAL, -5)
+        );
+
+        when(schemeRepository.findById(1L)).thenReturn(Optional.of(scheme));
+        when(planRepository.findBySchemeId(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> planService.createPlan(1L, 10L, stages))
+                .isInstanceOf(InvalidOperationException.class)
+                .hasMessageContaining("non-negative");
     }
 
     // ======================== getPlanBySchemeId ========================
@@ -286,17 +316,18 @@ class DisbursementPlanServiceTest {
 
     private List<DisbursementStage> validTwoStages() {
         return List.of(
-                stage("Initial Release", 1, new BigDecimal("60"), TriggerMilestone.APPLICATION_APPROVAL),
-                stage("Final Release", 2, new BigDecimal("40"), TriggerMilestone.PROJECT_CLOSURE)
+                stage("Initial Release", 1, new BigDecimal("60"), TriggerMilestone.APPLICATION_APPROVAL, 7),
+                stage("Final Release", 2, new BigDecimal("40"), TriggerMilestone.PROJECT_CLOSURE, 30)
         );
     }
 
-    private DisbursementStage stage(String name, Integer seq, BigDecimal pct, TriggerMilestone milestone) {
+    private DisbursementStage stage(String name, Integer seq, BigDecimal pct, TriggerMilestone milestone, Integer dueDateOffsetDays) {
         DisbursementStage s = new DisbursementStage();
         s.setStageName(name);
         s.setSequenceNumber(seq);
         s.setPercentageOfGrant(pct);
         s.setTriggerMilestone(milestone);
+        s.setDueDateOffsetDays(dueDateOffsetDays);
         return s;
     }
 
