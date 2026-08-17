@@ -226,3 +226,48 @@ Implement dynamic verification routing aligned with the Infosys project specific
 ### 7. Any Future Considerations
 - The routing thresholds are currently hardcoded constants. If scheme-specific fast-track rules are needed in the future, the constants can be migrated to fields on the `Scheme` entity without changing the routing logic structure.
 - District and Finance rejection paths remain terminal. If the specification later requires rejected applications to be resubmittable, the status machine will need an additional transition.
+
+---
+
+## Phase 7 — JWT Migration & Centralized RBAC
+
+### 1. Objective
+Complete the migration to JSON Web Token (JWT) authentication, centralize Role-Based Access Control (RBAC) in `SecurityConfig.java`, and implement a robust automated testing suite to verify Spring Security authorization behavior.
+
+### 2. Files Created
+- `src/test/java/com/subsidytracker/security/SecurityConfigAuthorizationTest.java`: Integration test suite containing 34 focused authorization tests verifying public, role-based, forbidden, and unauthenticated scenarios.
+
+### 3. Files Modified
+- `src/main/java/com/subsidytracker/common/config/SecurityConfig.java`: Centralized all role restrictions using Spring Security request matchers.
+
+### 4. Important Implementation Decisions & Architecture
+- **JWT Authentication Pipeline**: Replaced basic credentials with stateless JWT authentication. Authentication goes through `AuthenticationManager` on login, generating a JWT containing the user's email and role. Subsequent requests carry a Bearer token which `JwtAuthenticationFilter` validates.
+- **Database Authority Resolution**: To preserve security integrity, the role and authorities are resolved dynamically from the database through `CustomUserDetailsService` on each request, rather than relying solely on the role claim stored in the token.
+- **Centralized Authorization Matchers**: Enforced all role boundaries centrally within `SecurityConfig.java` using Spring Security request matchers in precise evaluation order (specific matchers before generic fallbacks). No `@PreAuthorize` or method-level annotations were introduced.
+- **No Production Code Side Effects**: No database schema changes, new entities, services, or controllers were created, preserving existing Milestone 1–3 business logic entirely.
+
+### 5. API Changes & Role Restrictions
+Centralized request matchers enforce the following role mappings:
+- **Public access**: `/api/v1/auth/**` (register/login) and `/dashboard/**` (static web page) remain accessible via `permitAll()`.
+- **Beneficiary Self-Service**: `POST /api/v1/beneficiaries`, `GET /api/v1/beneficiaries/me`, `PUT /api/v1/beneficiaries/{id}`, `POST /api/v1/applications`, `GET /api/v1/applications/my-applications`, `POST /api/v1/applications/{id}/submit`, and `POST /api/v1/applications/{id}/documents` are restricted to `BENEFICIARY`.
+- **Oversight Reads**: `GET /api/v1/beneficiaries`, `GET /api/v1/applications`, and `GET /api/v1/applications/status/{status}` are restricted to `FIELD_OFFICER`, `DISTRICT_OFFICER`, `FINANCE_APPROVER`, and `ADMIN`.
+- **Shared Reads**: `GET /api/v1/applications/{id}` and `GET /api/v1/applications/{id}/documents` allow `BENEFICIARY`, `FIELD_OFFICER`, `DISTRICT_OFFICER`, `FINANCE_APPROVER`, and `ADMIN`.
+- **Verification**: `PATCH /api/v1/applications/{id}/verify`, `PATCH /api/v1/applications/{id}/documents/{documentId}/verify`, and `PATCH /api/v1/applications/{id}/resume-verification` are restricted to `FIELD_OFFICER`, `DISTRICT_OFFICER`, and `FINANCE_APPROVER`.
+- **Eligibility Recalculation**: `POST /api/v1/applications/{id}/calculate-eligibility` is restricted to `ADMIN`.
+- **Scheme Management**: `POST /api/v1/schemes`, `PUT /api/v1/schemes/{id}`, `DELETE /api/v1/schemes/{id}`, `POST /api/v1/schemes/{id}/slabs`, and `POST /api/v1/schemes/{id}/regional-budgets` are restricted to `ADMIN`. GET operations remain open to all authenticated users.
+- **Disbursement Plan Management**: `POST`, `PUT`, and `DELETE` on `/api/disbursement/plans/**` are restricted to `ADMIN`. Plan reads are restricted to officers and `ADMIN`.
+- **Schedule Generation**: `POST /api/disbursement/schedules/generate/{id}` is restricted to `FINANCE_APPROVER` and `ADMIN`.
+- **Compliance Milestones**: Creation of compliance milestones is restricted to `ADMIN`. Completion of compliance milestones is restricted to `FIELD_OFFICER` and `DISTRICT_OFFICER`.
+- **Analytics, Dashboards, and Reports**: `/api/v1/analytics/**`, `/api/v1/dashboard/**`, and `/api/v1/reports/**` are restricted to `ADMIN`, `FINANCE_APPROVER`, and `DISTRICT_OFFICER`.
+- **Fallback**: `.anyRequest().authenticated()` at the end of the config chain protects all undefined endpoints.
+
+### 6. Testing Performed
+- Added **34 automated authorization tests** in `SecurityConfigAuthorizationTest.java` verifying security behavior.
+- Total test count reached **75 passing tests** in the project test suite, with all tests successfully passing.
+
+### 7. Any Future Considerations
+- `RegisterRequestDto` currently lacks validation annotations and may be hardened later.
+- `httpBasic()` is still enabled alongside JWT and may be removed later for a cleaner JWT-only configuration.
+- The committed JWT secret should ideally be moved to external/local configuration.
+- A custom JSON `AccessDeniedHandler` could be added later for consistent 403 responses.
+

@@ -71,36 +71,74 @@ public class SecurityConfig {
             )
             .authenticationProvider(authenticationProvider())
             .authorizeHttpRequests(auth -> auth
-                // Public — registration and login
+                // 1. Public endpoints
                 .requestMatchers("/api/v1/auth/**").permitAll()
-
-                // Public — static dashboard page itself (Module 4). The page's JS
-                // calls the /api/v1/dashboard/** and /api/v1/reports/** endpoints
-                // below with a Bearer token, so the API calls are still authenticated.
                 .requestMatchers("/dashboard/**").permitAll()
 
-                // Scheme management — ADMIN only
-                .requestMatchers(HttpMethod.POST, "/api/v1/schemes/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.PUT, "/api/v1/schemes/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.DELETE, "/api/v1/schemes/**").hasRole("ADMIN")
+                // 2. Beneficiary self-service
+                .requestMatchers(HttpMethod.POST, "/api/v1/beneficiaries").hasRole("BENEFICIARY")
+                .requestMatchers(HttpMethod.GET, "/api/v1/beneficiaries/me").hasRole("BENEFICIARY")
+                .requestMatchers(HttpMethod.PUT, "/api/v1/beneficiaries/*").hasRole("BENEFICIARY")
+                .requestMatchers(HttpMethod.POST, "/api/v1/applications").hasRole("BENEFICIARY")
+                .requestMatchers(HttpMethod.GET, "/api/v1/applications/my-applications").hasRole("BENEFICIARY")
+                .requestMatchers(HttpMethod.POST, "/api/v1/applications/*/submit").hasRole("BENEFICIARY")
+                .requestMatchers(HttpMethod.POST, "/api/v1/applications/*/documents").hasRole("BENEFICIARY")
 
-                // Verification actions — officers only
-                .requestMatchers(HttpMethod.PATCH, "/api/v1/applications/*/verify")
-                    .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER")
+                // 3. Officer/Admin oversight read access
+                .requestMatchers(HttpMethod.GET, "/api/v1/beneficiaries").hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/applications").hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/applications/status/*").hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER", "ADMIN")
 
-                // Document verification — officers only
-                .requestMatchers(HttpMethod.PATCH, "/api/v1/applications/*/documents/*/verify")
-                    .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER")
+                // 4. Shared application/document read access
+                .requestMatchers(HttpMethod.GET, "/api/v1/applications/*").hasAnyRole("BENEFICIARY", "FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/applications/*/documents").hasAnyRole("BENEFICIARY", "FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER", "ADMIN")
 
-                // Manual eligibility recalculation — ADMIN only
-                .requestMatchers(HttpMethod.POST, "/api/v1/applications/*/calculate-eligibility")
-                    .hasRole("ADMIN")
+                // 5. Document & application verification (officers only)
+                .requestMatchers(HttpMethod.PATCH, "/api/v1/applications/*/documents/*/verify").hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER")
+                .requestMatchers(HttpMethod.PATCH, "/api/v1/applications/*/verify").hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER")
+                .requestMatchers(HttpMethod.PATCH, "/api/v1/applications/*/resume-verification").hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER")
 
-                // Everything else requires authentication (any role)
+                // 6. Manual eligibility recalculation (ADMIN only)
+                .requestMatchers(HttpMethod.POST, "/api/v1/applications/*/calculate-eligibility").hasRole("ADMIN")
+
+                // 7. Scheme management (ADMIN write, authenticated read)
+                .requestMatchers(HttpMethod.POST, "/api/v1/schemes").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/v1/schemes/*").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/schemes/*").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/v1/schemes/*/slabs").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/v1/schemes/*/regional-budgets").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/schemes").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/v1/schemes/*").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/v1/schemes/*/slabs").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/v1/schemes/*/regional-budgets").authenticated()
+
+                // 8. Disbursement plan management
+                .requestMatchers(HttpMethod.POST, "/api/disbursement/plans").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/disbursement/plans/*").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/disbursement/plans/*").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/disbursement/plans/*").hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/disbursement/plans/scheme/*").hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER", "ADMIN")
+
+                // 9. Schedule generation & viewing
+                .requestMatchers(HttpMethod.POST, "/api/disbursement/schedules/generate/*").hasAnyRole("FINANCE_APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/disbursement/schedules/application/*").hasAnyRole("BENEFICIARY", "FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER", "ADMIN")
+
+                // 10. Compliance milestones
+                .requestMatchers(HttpMethod.POST, "/api/disbursement/compliance/application/*").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/disbursement/compliance/*/complete").hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER")
+                .requestMatchers(HttpMethod.GET, "/api/disbursement/compliance/pending").hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/disbursement/compliance/overdue").hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/disbursement/compliance/application/*").hasAnyRole("BENEFICIARY", "FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER", "ADMIN")
+
+                // 11. Analytics / Dashboard / Reports (oversight)
+                .requestMatchers("/api/v1/analytics/**").hasAnyRole("ADMIN", "FINANCE_APPROVER", "DISTRICT_OFFICER")
+                .requestMatchers("/api/v1/dashboard/**").hasAnyRole("ADMIN", "FINANCE_APPROVER", "DISTRICT_OFFICER")
+                .requestMatchers("/api/v1/reports/**").hasAnyRole("ADMIN", "FINANCE_APPROVER", "DISTRICT_OFFICER")
+
+                // 12. Fallback
                 .anyRequest().authenticated()
             )
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-            .httpBasic(Customizer.withDefaults());
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
