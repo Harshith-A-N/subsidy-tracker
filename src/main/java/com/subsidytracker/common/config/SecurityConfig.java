@@ -128,11 +128,11 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PUT, "/api/disbursement/plans/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/disbursement/plans/**").hasRole("ADMIN")
 
-                // Compliance milestone creation (ADMIN) and completion (field/district officers & finance fund release)
+                // Compliance milestone creation (ADMIN) and completion (field/district officers & admin)
                 .requestMatchers(HttpMethod.POST, "/api/disbursement/compliance/application/*")
                     .hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/disbursement/compliance/*/complete")
-                    .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER", "ADMIN")
+                    .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "ADMIN")
 
                 // Compliance milestone listings: pending/overdue
                 .requestMatchers(HttpMethod.GET, "/api/disbursement/compliance/pending")
@@ -144,8 +144,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/disbursement/compliance/application/**")
                     .authenticated()
 
-                // Disbursement schedule generation
-                .requestMatchers(HttpMethod.POST, "/api/disbursement/schedules/**")
+                // Disbursement schedule generation and release
+                .requestMatchers(HttpMethod.POST, "/api/disbursement/schedules/generate/*")
+                    .hasAnyRole("FINANCE_APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/disbursement/schedules/*/release")
                     .hasAnyRole("FINANCE_APPROVER", "ADMIN")
 
                 // Per-application schedule reads
@@ -174,6 +176,10 @@ public class SecurityConfig {
 
                 // User listing (Admin "All Users" page) — ADMIN only.
                 .requestMatchers(HttpMethod.GET, "/api/v1/users")
+                    .hasRole("ADMIN")
+
+                // Officer registration approval management — ADMIN only
+                .requestMatchers("/api/v1/admin/officer-registration-requests/**")
                     .hasRole("ADMIN")
 
                 // Everything else requires authentication (any role)

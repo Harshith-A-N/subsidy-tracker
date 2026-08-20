@@ -27,6 +27,15 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import com.subsidytracker.common.enums.ComplianceStatus;
+import com.subsidytracker.common.enums.DisbursementScheduleStatus;
+import com.subsidytracker.disbursement.entity.ApplicationDisbursementSchedule;
+import com.subsidytracker.disbursement.entity.DisbursementMilestone;
+import com.subsidytracker.disbursement.entity.DisbursementStage;
+import com.subsidytracker.disbursement.repository.ApplicationDisbursementScheduleRepository;
+import com.subsidytracker.disbursement.repository.DisbursementMilestoneRepository;
+import com.subsidytracker.disbursement.repository.DisbursementStageRepository;
+
 @Service
 public class DocumentService {
 
@@ -40,41 +49,88 @@ public class DocumentService {
     private final ApplicationRepository applicationRepository;
     private final UserRepository userRepository;
     private final CloudinaryService cloudinaryService;
+    private final DisbursementStageRepository stageRepository;
+    private final ApplicationDisbursementScheduleRepository scheduleRepository;
+    private final DisbursementMilestoneRepository milestoneRepository;
 
     public DocumentService(DocumentRepository documentRepository,
                            ApplicationRepository applicationRepository,
                            UserRepository userRepository,
-                           CloudinaryService cloudinaryService) {
+                           CloudinaryService cloudinaryService,
+                           DisbursementStageRepository stageRepository,
+                           ApplicationDisbursementScheduleRepository scheduleRepository,
+                           DisbursementMilestoneRepository milestoneRepository) {
         this.documentRepository = documentRepository;
         this.applicationRepository = applicationRepository;
         this.userRepository = userRepository;
         this.cloudinaryService = cloudinaryService;
+        this.stageRepository = stageRepository;
+        this.scheduleRepository = scheduleRepository;
+        this.milestoneRepository = milestoneRepository;
     }
 
     @Transactional
     public DocumentResponseDto uploadDocument(Long applicationId, String documentType,
                                               MultipartFile file, long currentUserId) {
+        return uploadDocument(applicationId, documentType, file, currentUserId, null);
+    }
+
+    @Transactional
+    public DocumentResponseDto uploadDocument(Long applicationId, String documentType,
+                                              MultipartFile file, long currentUserId, Long stageId) {
         Application application = applicationRepository.findById(applicationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Application", applicationId));
 
         // Ownership: application must belong to the authenticated beneficiary
         validateBeneficiaryOwnership(application, currentUserId);
 
-        // Status gate: only DRAFT and RE_VERIFICATION_REQUIRED allow uploads
-        if (!UPLOAD_ALLOWED_STATUSES.contains(application.getStatus())) {
-            throw new InvalidOperationException(
-                    "Documents can only be uploaded when the application is in DRAFT or RE_VERIFICATION_REQUIRED status. "
-                            + "Current status: " + application.getStatus());
-        }
-
         if (file.isEmpty()) {
             throw new InvalidOperationException("Uploaded file is empty.");
+        }
+
+        DisbursementStage stage = null;
+        if (stageId != null) {
+            stage = stageRepository.findById(stageId)
+                    .orElseThrow(() -> new ResourceNotFoundException("DisbursementStage", stageId));
+
+            if (!stage.getPlan().getScheme().getId().equals(application.getScheme().getId())) {
+                throw new InvalidOperationException("Referenced stage does not belong to this application's scheme.");
+            }
+
+            ApplicationDisbursementSchedule schedule = scheduleRepository.findByApplicationId(applicationId).stream()
+                    .filter(s -> s.getStage().getId().equals(stageId))
+                    .findFirst()
+                    .orElseThrow(() -> new InvalidOperationException("No schedule found for this application and stage."));
+
+            if (schedule.getStatus() != DisbursementScheduleStatus.RELEASED) {
+                throw new InvalidOperationException("Utilization proof can only be uploaded after the corresponding stage has been released.");
+            }
+
+            DisbursementMilestone milestone = milestoneRepository.findByApplicationIdOrderBySequenceOrderAsc(applicationId).stream()
+                    .filter(m -> m.getStage().getId().equals(stageId))
+                    .findFirst()
+                    .orElseThrow(() -> new InvalidOperationException("No milestone found for this stage."));
+
+            if (milestone.getComplianceStatus() == ComplianceStatus.COMPLETED) {
+                throw new InvalidOperationException("Compliance for this stage has already been completed.");
+            }
+
+            milestone.setComplianceStatus(ComplianceStatus.PROOF_SUBMITTED);
+            milestoneRepository.save(milestone);
+        } else {
+            // Status gate for KYC documents: only DRAFT and RE_VERIFICATION_REQUIRED allow KYC uploads
+            if (!UPLOAD_ALLOWED_STATUSES.contains(application.getStatus())) {
+                throw new InvalidOperationException(
+                        "Documents can only be uploaded when the application is in DRAFT or RE_VERIFICATION_REQUIRED status. "
+                                + "Current status: " + application.getStatus());
+            }
         }
 
         String cloudinaryUrl = cloudinaryService.upload(file);
 
         Document document = new Document();
         document.setApplication(application);
+        document.setStage(stage);
         document.setDocumentType(documentType);
         document.setFilePath(cloudinaryUrl);
         document.setUploadedAt(LocalDateTime.now());
