@@ -1,6 +1,7 @@
 package com.subsidytracker.common.entity;
 
 import com.subsidytracker.common.enums.DocumentVerificationStatus;
+import com.subsidytracker.disbursement.entity.DisbursementStage;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -19,6 +20,10 @@ public class Document {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "application_id", nullable = false)
     private Application application;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "stage_id")
+    private DisbursementStage stage;
 
     @Column(nullable = false)
     private String documentType; // must match a value in Scheme.requiredDocuments

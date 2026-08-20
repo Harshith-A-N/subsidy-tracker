@@ -9,4 +9,6 @@ import java.util.List;
 @Repository
 public interface DocumentRepository extends JpaRepository<Document, Long> {
     List<Document> findByApplicationId(Long applicationId);
+    List<Document> findByApplicationIdAndStageId(Long applicationId, Long stageId);
+    boolean existsByApplicationIdAndStageId(Long applicationId, Long stageId);
 }

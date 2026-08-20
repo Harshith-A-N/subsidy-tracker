@@ -25,12 +25,17 @@ import com.subsidytracker.scheme.repository.SchemeSlabRepository;
 import com.subsidytracker.common.entity.User;
 import com.subsidytracker.common.service.AuditLogService;
 
+import com.subsidytracker.common.entity.User;
+import com.subsidytracker.common.enums.ComplianceStatus;
+import com.subsidytracker.common.enums.Role;
+import com.subsidytracker.disbursement.entity.DisbursementMilestone;
+import com.subsidytracker.disbursement.repository.DisbursementMilestoneRepository;
+import com.subsidytracker.eligibility.repository.UserRepository;
+import com.subsidytracker.scheme.repository.RegionalBudgetRepository;
+
 @Service
 public class ScheduleGenerationService {
 
-    // Same 7-day-per-stage cadence used by ComplianceMilestoneService when it
-    // creates milestones from these schedules — kept in one place (see below)
-    // so the two can never drift out of sync again.
     private static final int DAYS_BETWEEN_STAGES = 7;
 
     private final ApplicationRepository applicationRepository;
@@ -39,13 +44,20 @@ public class ScheduleGenerationService {
     private final DisbursementStageRepository stageRepository;
     private final ApplicationDisbursementScheduleRepository scheduleRepository;
     private final SchemeSlabRepository schemeSlabRepository;
+    private final DisbursementMilestoneRepository milestoneRepository;
+    private final RegionalBudgetRepository regionalBudgetRepository;
+    private final UserRepository userRepository;
     private final AuditLogService auditLogService;
 
     public ScheduleGenerationService(ApplicationRepository applicationRepository,
-                                     DisbursementPlanRepository planRepository, ComplianceMilestoneService complianceMilestoneService,
+                                     DisbursementPlanRepository planRepository,
+                                     ComplianceMilestoneService complianceMilestoneService,
                                      DisbursementStageRepository stageRepository,
                                      ApplicationDisbursementScheduleRepository scheduleRepository,
                                      SchemeSlabRepository schemeSlabRepository,
+                                     DisbursementMilestoneRepository milestoneRepository,
+                                     RegionalBudgetRepository regionalBudgetRepository,
+                                     UserRepository userRepository,
                                      AuditLogService auditLogService) {
         this.applicationRepository = applicationRepository;
         this.planRepository = planRepository;
@@ -53,10 +65,92 @@ public class ScheduleGenerationService {
         this.stageRepository = stageRepository;
         this.scheduleRepository = scheduleRepository;
         this.schemeSlabRepository = schemeSlabRepository;
+        this.milestoneRepository = milestoneRepository;
+        this.regionalBudgetRepository = regionalBudgetRepository;
+        this.userRepository = userRepository;
         this.auditLogService = auditLogService;
     }
 
     // ---------- Public API ----------
+
+    @Transactional
+    public ApplicationDisbursementSchedule releaseStage(Long scheduleId, Long userId) {
+        if (userId != null) {
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+            if (user.getRole() != Role.FINANCE_APPROVER && user.getRole() != Role.ADMIN) {
+                throw new InvalidOperationException("Only Finance Approvers and Administrators can release disbursement funds.");
+            }
+        }
+
+        ApplicationDisbursementSchedule schedule = scheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> new ResourceNotFoundException("ApplicationDisbursementSchedule", scheduleId));
+
+        if (schedule.getStatus() == DisbursementScheduleStatus.RELEASED) {
+            throw new InvalidOperationException("This disbursement stage has already been released.");
+        }
+
+        Long applicationId = schedule.getApplication().getId();
+        List<ApplicationDisbursementSchedule> allSchedules = scheduleRepository
+                .findByApplicationIdOrderByStageSequenceNumberAsc(applicationId);
+
+        int index = -1;
+        for (int i = 0; i < allSchedules.size(); i++) {
+            if (allSchedules.get(i).getId().equals(scheduleId)) {
+                index = i;
+                break;
+            }
+        }
+
+        if (index > 0) {
+            ApplicationDisbursementSchedule prevSchedule = allSchedules.get(index - 1);
+            if (prevSchedule.getStatus() != DisbursementScheduleStatus.RELEASED) {
+                throw new InvalidOperationException("Previous stage (" + prevSchedule.getStage().getStageName()
+                        + ") must be released before this stage can be released.");
+            }
+
+            DisbursementMilestone prevMilestone = milestoneRepository
+                    .findByApplicationIdOrderBySequenceOrderAsc(applicationId).stream()
+                    .filter(m -> m.getStage().getId().equals(prevSchedule.getStage().getId()))
+                    .findFirst()
+                    .orElseThrow(() -> new InvalidOperationException("No milestone found for previous stage."));
+
+            if (prevMilestone.getComplianceStatus() != ComplianceStatus.COMPLETED) {
+                throw new InvalidOperationException("Previous stage utilization proof (" + prevSchedule.getStage().getStageName()
+                        + ") must be verified by an officer before releasing the next stage.");
+            }
+        }
+
+        schedule.setStatus(DisbursementScheduleStatus.RELEASED);
+        ApplicationDisbursementSchedule saved = scheduleRepository.save(schedule);
+
+        String region = schedule.getApplication().getBeneficiary().getRegion();
+        Long schemeId = schedule.getApplication().getScheme().getId();
+
+        if (region != null) {
+            regionalBudgetRepository.findBySchemeId(schemeId).stream()
+                    .filter(rb -> region.equalsIgnoreCase(rb.getRegionName()))
+                    .findFirst()
+                    .ifPresent(rb -> {
+                        BigDecimal current = rb.getUtilizedBudget() != null ? rb.getUtilizedBudget() : BigDecimal.ZERO;
+                        rb.setUtilizedBudget(current.add(schedule.getScheduledAmount()));
+                        regionalBudgetRepository.save(rb);
+                    });
+        }
+
+        try {
+            auditLogService.logEvent(
+                    "ApplicationDisbursementSchedule",
+                    schedule.getId(),
+                    "STAGE_RELEASED",
+                    userId != null ? userRepository.findById(userId).orElse(null) : null,
+                    "Released stage " + schedule.getStage().getStageName() + " (" + schedule.getScheduledAmount() + ") for application id: " + applicationId);
+        } catch (Exception e) {
+            // Audit log failure must not block primary operation
+        }
+
+        return saved;
+    }
 
     @Transactional
     public List<ApplicationDisbursementSchedule> generateSchedule(Long applicationId) {

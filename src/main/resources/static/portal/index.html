@@ -1729,7 +1729,7 @@
         const SCHEDULE_STATUS_INFO = { PENDING: { badge: 'warning', icon: '⏳', label: 'Pending' }, RELEASED: { badge: 'success', icon: '✅', label: 'Released' }, ON_HOLD: { badge: 'danger', icon: '⏸️', label: 'On Hold' } };
         function scheduleStatusBadge(s) { const i = SCHEDULE_STATUS_INFO[s] || { badge: 'muted', icon: '❔', label: s }; return `<span class="badge badge-${i.badge}">${i.icon} ${i.label}</span>`; }
 
-        const COMPLIANCE_STATUS_INFO = { PENDING: { badge: 'warning', icon: '⏳', label: 'Pending' }, COMPLETED: { badge: 'success', icon: '✅', label: 'Completed' }, OVERDUE: { badge: 'danger', icon: '⚠️', label: 'Overdue' }, NON_COMPLIANT: { badge: 'danger', icon: '❌', label: 'Non-Compliant' } };
+        const COMPLIANCE_STATUS_INFO = { PENDING: { badge: 'warning', icon: '⏳', label: 'Pending' }, PROOF_SUBMITTED: { badge: 'info', icon: '📸', label: 'Proof Submitted' }, COMPLETED: { badge: 'success', icon: '✅', label: 'Completed' }, OVERDUE: { badge: 'danger', icon: '⚠️', label: 'Overdue' }, NON_COMPLIANT: { badge: 'danger', icon: '❌', label: 'Non-Compliant' } };
         function complianceStatusBadge(s) { const i = COMPLIANCE_STATUS_INFO[s] || { badge: 'muted', icon: '❔', label: s }; return `<span class="badge badge-${i.badge}">${i.icon} ${i.label}</span>`; }
 
         const BENEFICIARY_CATEGORIES = ['GENERAL', 'SC', 'ST', 'OBC', 'EWS'];
@@ -2162,10 +2162,10 @@
         </div>`).join('');
         }
 
-        function quickLogin(email, pw) {
-            const r = login(email, pw);
+        async function quickLogin(email, pw) {
+            const r = await login(email, pw);
             if (r.success) { showToast('Welcome, ' + r.user.name + '! 👋', 'success'); _history = []; navigate(dashPage(r.user.role)); }
-            else showToast(r.error, 'error');
+            else showToast(r.error || 'Login failed', 'error');
         }
 
         /* ================================================================
@@ -2241,13 +2241,18 @@
 
     <div class="alert alert-info" style="margin-bottom:20px">
       <span class="alert-icon">💡</span>
-      <div>Self-registration is for <strong>Beneficiaries / Citizens</strong> only. Field Officer, District Officer, Finance Approver and Administrator accounts are provisioned by the system administrator — contact them if you need one.</div>
+      <div>Select your role below. <strong>Beneficiaries</strong> receive instant access. <strong>Officer/Staff</strong> registration requests require approval by an Administrator before login access is granted.</div>
     </div>
     <div class="form-group" style="margin-bottom:20px">
       <label class="form-label">Registering As</label>
-      <div class="role-grid" style="grid-template-columns:1fr">
-        ${[{ k: 'beneficiary', e: '👨‍🌾', n: 'Beneficiary / Citizen', d: 'Apply for government grants & subsidies' }].map(r => `
-          <div class="role-card selected" id="rc-${r.k}">
+      <div class="role-grid" style="grid-template-columns:repeat(auto-fit, minmax(130px, 1fr))">
+        ${[
+          { k: 'beneficiary', e: '👨‍🌾', n: 'Beneficiary', d: 'Apply for grants' },
+          { k: 'field_officer', e: '🔍', n: 'Field Officer', d: 'Ground verification' },
+          { k: 'district_officer', e: '📋', n: 'District Officer', d: 'Review & approval' },
+          { k: 'finance_approver', e: '💰', n: 'Finance Approver', d: 'Disbursement approval' }
+        ].map((r, i) => `
+          <div class="role-card ${i === 0 ? 'selected' : ''}" id="rc-${r.k}" onclick="selectRole('${r.k}')" style="cursor:pointer">
             <div class="r-emoji">${r.e}</div>
             <div class="r-name">${r.n}</div>
             <div class="r-desc">${r.d}</div>
@@ -2310,25 +2315,14 @@
           <div class="form-group"><label class="form-label">Category <span class="req">*</span></label>
             <select class="form-input form-select" id="r-cat" required>
               <option value="">Select category</option>
-              <option value="General">General</option><option value="OBC">OBC — Other Backward Class</option><option value="SC">SC — Scheduled Caste</option><option value="ST">ST — Scheduled Tribe</option><option value="BPL">BPL — Below Poverty Line</option>
+              <option value="General">General</option><option value="OBC">OBC — Other Backward Class</option><option value="SC">SC — Scheduled Caste</option><option value="ST">ST — Scheduled Tribe</option>
             </select>
           </div>
         </div>
       </div>
       <div class="info-section">
-        <h4>💰 Financial & Asset Details</h4>
-        <div class="form-row">
-          <div class="form-group"><label class="form-label">Annual Family Income (₹) <span class="req">*</span></label><input class="form-input" type="number" id="r-income" placeholder="e.g. 180000" required min="0"/><div class="form-hint">Total household income per year</div></div>
-          <div class="form-group"><label class="form-label">Land Holding (Acres)</label><input class="form-input" type="number" id="r-land" placeholder="0 if no land" step="0.1" min="0" value="0"/><div class="form-hint">Agricultural land owned (0 if none)</div></div>
-        </div>
-      </div>
-      <div class="info-section">
-        <h4>🏦 Bank Account Details</h4>
-        <div class="form-row">
-          <div class="form-group"><label class="form-label">Bank Account Number <span class="req">*</span></label><input class="form-input" id="r-bank" placeholder="Enter account number" required/></div>
-          <div class="form-group"><label class="form-label">IFSC Code <span class="req">*</span></label><input class="form-input" id="r-ifsc" placeholder="e.g. SBIN0001234" required maxlength="11"/></div>
-        </div>
-        <div class="form-group"><label class="form-label">Bank Name</label><input class="form-input" id="r-bankname" placeholder="e.g. State Bank of India"/></div>
+        <h4>💰 Financial Details</h4>
+        <div class="form-group"><label class="form-label">Annual Family Income (₹) <span class="req">*</span></label><input class="form-input" type="number" id="r-income" placeholder="e.g. 180000" required min="0"/><div class="form-hint">Total household income per year</div></div>
       </div>
       <div class="requirement-card">
         <h4>📋 What you need to apply for schemes later:</h4>
@@ -2451,30 +2445,72 @@
                 const aadhaar = document.getElementById('r-aadhaar')?.value.trim();
                 const cat = document.getElementById('r-cat')?.value;
                 const income = parseFloat(document.getElementById('r-income')?.value) || 0;
-                const land = parseFloat(document.getElementById('r-land')?.value) || 0;
-                const bank = document.getElementById('r-bank')?.value.trim();
-                const ifsc = document.getElementById('r-ifsc')?.value.trim();
                 if (!aadhaar || aadhaar.length < 12) { err.innerHTML = '⚠️ Enter valid 12-digit Aadhaar number.'; err.style.display = 'flex'; return; }
                 if (!cat) { err.innerHTML = '⚠️ Please select your category.'; err.style.display = 'flex'; return; }
-                if (!bank) { err.innerHTML = '⚠️ Bank account number is required.'; err.style.display = 'flex'; return; }
-                if (!ifsc) { err.innerHTML = '⚠️ IFSC code is required.'; err.style.display = 'flex'; return; }
-                Object.assign(data, { aadhaar, category: cat, incomePerAnnum: income, landAcres: land, bankAccount: bank, ifsc, bankName: document.getElementById('r-bankname')?.value.trim() });
+                Object.assign(data, { aadhaar, category: cat, incomePerAnnum: income });
+                try { sessionStorage.setItem('pending_reg_profile', JSON.stringify(data)); } catch(e) {}
+                btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Creating Account...';
+                const r = await register(data);
+                if (r.success) {
+                    showToast('Welcome, ' + r.user.name + '! Your account is ready. 🎉', 'success');
+                    _history = [];
+                    navigate(dashPage(r.user.role));
+                }
+                else { btn.disabled = false; btn.innerHTML = '✍️ Create My Account'; err.innerHTML = '⚠️ ' + r.error; err.style.display = 'flex'; }
             } else {
-                const empId = document.getElementById('r-empid')?.value.trim();
-                const desig = document.getElementById('r-designation')?.value;
-                if (!empId) { err.innerHTML = '⚠️ Employee ID is required.'; err.style.display = 'flex'; return; }
-                if (!desig) { err.innerHTML = '⚠️ Please select your designation.'; err.style.display = 'flex'; return; }
-                Object.assign(data, { employeeId: empId, designation: desig, assignedDistrict: document.getElementById('r-district')?.value.trim(), department: document.getElementById('r-dept')?.value.trim(), district: document.getElementById('r-district')?.value.trim() });
+                const roleEnumMap = {
+                    field_officer: 'FIELD_OFFICER',
+                    district_officer: 'DISTRICT_OFFICER',
+                    finance_approver: 'FINANCE_APPROVER'
+                };
+                const requestedRole = roleEnumMap[role];
+                if (!requestedRole) { err.innerHTML = '⚠️ Invalid officer role selected.'; err.style.display = 'flex'; return; }
+
+                btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Submitting Request...';
+                const payload = {
+                    fullName: name,
+                    email: email,
+                    password: pass,
+                    phone: phone,
+                    requestedRole: requestedRole,
+                    region: region
+                };
+                const r = await apiFetch('/api/v1/auth/officer-register', {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+                if (r.success) {
+                    showToast('Officer registration request submitted for Admin approval! ⏳', 'success');
+                    renderOfficerRequestSubmitted(name, email, requestedRole, region);
+                } else {
+                    btn.disabled = false; btn.innerHTML = '✍️ Create My Account';
+                    err.innerHTML = '⚠️ ' + r.error; err.style.display = 'flex';
+                }
             }
-            try { sessionStorage.setItem('pending_reg_profile', JSON.stringify(data)); } catch(e) {}
-            btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Creating Account...';
-            const r = await register(data);
-            if (r.success) {
-                showToast('Welcome, ' + r.user.name + '! Your account is ready. 🎉', 'success');
-                _history = [];
-                navigate(dashPage(r.user.role));
-            }
-            else { btn.disabled = false; btn.innerHTML = '✍️ Create My Account'; err.innerHTML = '⚠️ ' + r.error; err.style.display = 'flex'; }
+        }
+
+        function renderOfficerRequestSubmitted(name, email, role, region) {
+            const container = document.getElementById('b-main') || document.querySelector('.auth-card') || document.querySelector('.container');
+            if (!container) return;
+            const roleLabels = { FIELD_OFFICER: 'Field Officer', DISTRICT_OFFICER: 'District Officer', FINANCE_APPROVER: 'Finance Approver' };
+            container.innerHTML = `
+  <div class="card" style="max-width:560px;margin:30px auto;text-align:center;padding:36px">
+    <div style="font-size:48px;margin-bottom:14px">⏳</div>
+    <h2 style="font-size:22px;font-weight:800;margin-bottom:10px">Registration Request Submitted</h2>
+    <p class="text-sm text-muted" style="margin-bottom:20px">
+      Thank you, <strong>${name}</strong>! Your registration request for <strong>${roleLabels[role] || role}</strong> (${region || 'All Regions'}) has been submitted for Administrator approval.
+    </p>
+    <div class="alert alert-info" style="text-align:left;margin-bottom:24px">
+      <span class="alert-icon">💡</span>
+      <div style="font-size:12px">
+        <strong>What happens next?</strong><br>
+        1. An Administrator reviews your registration request.<br>
+        2. Once approved, your user account will be activated.<br>
+        3. You can then log in using <strong>${email}</strong> and your password.
+      </div>
+    </div>
+    <button class="btn btn-primary btn-lg" style="width:100%" onclick="navigate('login')">Return to Login →</button>
+  </div>`;
         }
 
         /* ================================================================
@@ -2586,6 +2622,7 @@
                 return;
             }
             showToast('Profile saved! Welcome to GovGrant.', 'success');
+            try { sessionStorage.removeItem('pending_reg_profile'); } catch(e) {}
             navigate('beneficiary', 'overview');
         }
 
@@ -2837,6 +2874,29 @@
                 const milestones = compRes.success ? compRes.data : [];
                 if (!schedule.length) { holder.innerHTML = `<div class="empty-state" style="padding:24px"><div class="e-icon">⏳</div><p style="font-size:13px">Disbursement schedule not generated yet.</p></div>`; return; }
                 const s = scheduleSummary(schedule);
+                const byStage = {};
+                milestones.forEach(ms => { if (ms.stage) byStage[ms.stage.id] = ms; });
+
+                const activeReleasedStage = schedule.find(st => st.status === 'RELEASED' && (!byStage[st.stageId] || byStage[st.stageId].complianceStatus !== 'COMPLETED'));
+
+                let proofSection = '';
+                if (activeReleasedStage) {
+                    const ms = byStage[activeReleasedStage.stageId];
+                    if (ms && ms.complianceStatus === 'PROOF_SUBMITTED') {
+                        proofSection = `<div class="alert alert-info" style="margin-top:14px"><span class="alert-icon">📸</span><div><strong>Utilization Proof Submitted for ${activeReleasedStage.stageName}</strong><br><span style="font-size:12px">Your uploaded proof is under review by the Field/District Officer. Next tranche will unlock once verified.</span></div></div>`;
+                    } else {
+                        proofSection = `
+                        <div class="card-glass" style="margin-top:14px;padding:14px;border:1px solid var(--primary-light)">
+                          <div style="font-size:14px;font-weight:700;margin-bottom:6px">📸 Upload Utilization Proof for Stage: ${activeReleasedStage.stageName}</div>
+                          <p class="text-xs text-muted" style="margin-bottom:10px">Funds (${fmtINRFull(Number(activeReleasedStage.scheduledAmount) || 0)}) have been released! You must upload proof of fund utilization (e.g. photo of equipment/work) before the next installment can be released.</p>
+                          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                            <input type="file" id="proof-file-${app.id}-${activeReleasedStage.stageId}" accept="image/*,.pdf" class="form-input form-input-sm" style="max-width:300px" />
+                            <button class="btn btn-primary btn-sm" onclick="benUploadProof(${app.id}, ${activeReleasedStage.stageId})">📤 Upload Utilization Proof</button>
+                          </div>
+                        </div>`;
+                    }
+                }
+
                 holder.innerHTML = `
       ${scheduleTrack(schedule)}
       <div style="display:flex;gap:20px;margin:16px 0;flex-wrap:wrap">
@@ -2845,6 +2905,7 @@
         <span class="text-sm text-muted">${s.pct}% complete</span>
       </div>
       <div class="progress-bar" style="height:10px;margin-bottom:16px"><div class="progress-fill success" style="width:${s.pct}%"></div></div>
+      ${proofSection}
       <div class="divider"></div>
       ${scheduleTable(schedule)}
       ${milestones.length ? `<div class="divider"></div><div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Compliance Milestones</div>
@@ -2852,6 +2913,38 @@
       ${milestones.map(mm => `<tr><td>${mm.milestoneType}</td><td class="text-sm text-muted">${mm.description || '—'}</td><td class="text-sm text-muted">${mm.dueDate || '—'}</td><td>${complianceStatusBadge(mm.complianceStatus)}</td></tr>`).join('')}
       </tbody></table></div>` : ''}`;
             });
+        }
+
+        async function benUploadProof(appId, stageId) {
+            const input = document.getElementById(`proof-file-${appId}-${stageId}`);
+            if (!input || !input.files.length) {
+                showToast('Please select an image or document file to upload.', 'error');
+                return;
+            }
+            const file = input.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('documentType', 'STAGE_UTILIZATION_PROOF');
+            formData.append('stageId', stageId);
+
+            showToast('Uploading utilization proof...', 'info');
+            const token = getToken();
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/applications/${appId}/documents?documentType=STAGE_UTILIZATION_PROOF&stageId=${stageId}`, {
+                    method: 'POST',
+                    headers: token ? { Authorization: 'Bearer ' + token } : {},
+                    body: formData
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    showToast(data.message || data.error || 'Upload failed', 'error');
+                    return;
+                }
+                showToast('Utilization proof uploaded! Awaiting officer verification.', 'success');
+                navigate('beneficiary', 'milestones');
+            } catch(e) {
+                showToast('Failed to upload utilization proof.', 'error');
+            }
         }
 
         function benProfile(m, user, beneficiary) {
@@ -3162,7 +3255,7 @@
             sub = sub || 'review';
             const user = requireAuth(['district_officer']); if (!user) return;
             container.innerHTML = navbar(user) + '<div class="sidebar-layout">' +
-                sidebar([{ label: 'District Operations', items: [{ key: 'review', icon: '📋', label: 'Pending Review' }, { key: 'decided', icon: '✅', label: 'Decided Cases' }, { key: 'profile', icon: '👤', label: 'My Profile' }] }], sub) +
+                sidebar([{ label: 'District Operations', items: [{ key: 'review', icon: '📋', label: 'Pending Review' }, { key: 'compliance', icon: '🔍', label: 'Stage Compliance' }, { key: 'decided', icon: '✅', label: 'Decided Cases' }, { key: 'profile', icon: '👤', label: 'My Profile' }] }], sub) +
                 '<main class="main-content fade-in" id="do-main"><div class="empty-state"><span class="loading-spinner"></span></div></main></div>';
             const m = document.getElementById('do-main');
 
@@ -3462,17 +3555,27 @@
                 return;
             }
 
-            const rows = sorted.map(entry => {
+            const rows = sorted.map((entry, idx) => {
                 const ms = byStage[entry.stageId];
                 let action = '—';
                 if (entry.status === 'PENDING') {
                     if (ms && ms.complianceStatus === 'OVERDUE') {
                         action = `<span class="text-xs" style="color:var(--danger)">⚠️ Overdue — flagged non-compliant</span>`;
-                    } else if (!releasableAssigned) {
-                        releasableAssigned = true;
-                        action = `<button class="btn btn-success btn-sm" onclick="faReleaseMilestone(${ms ? ms.id : 'null'},${app.id})" ${ms ? '' : 'disabled title="No compliance milestone found for this stage"'}>💸 Release ${fmtINR(Number(entry.scheduledAmount) || 0)}</button>`;
+                    } else if (idx === 0) {
+                        action = `<button class="btn btn-success btn-sm" onclick="faReleaseStage(${entry.id}, ${app.id})">💸 Release ${fmtINR(Number(entry.scheduledAmount) || 0)}</button>`;
                     } else {
-                        action = `<span class="text-xs text-muted">Awaiting earlier stage</span>`;
+                        const prevEntry = sorted[idx - 1];
+                        const prevMs = byStage[prevEntry.stageId];
+                        const prevReleased = prevEntry && prevEntry.status === 'RELEASED';
+                        const prevVerified = prevMs && prevMs.complianceStatus === 'COMPLETED';
+
+                        if (prevReleased && prevVerified) {
+                            action = `<button class="btn btn-success btn-sm" onclick="faReleaseStage(${entry.id}, ${app.id})">💸 Release ${fmtINR(Number(entry.scheduledAmount) || 0)}</button>`;
+                        } else if (!prevReleased) {
+                            action = `<span class="text-xs text-muted">🔒 Awaiting Stage ${prevEntry.stageSequenceNumber || idx} release</span>`;
+                        } else {
+                            action = `<span class="text-xs" style="color:var(--warning)">🔒 Awaiting Stage ${prevEntry.stageSequenceNumber || idx} proof verification</span>`;
+                        }
                     }
                 }
                 return `<tr>
@@ -3501,9 +3604,6 @@
         async function faGenerateSchedule(appId) {
             const r = await apiFetch(`/api/disbursement/schedules/generate/${appId}`, { method: 'POST' });
             if (!r.success) { showToast(r.error, 'error'); return; }
-            // Schedule alone isn't enough — the Release action needs a matching
-            // ComplianceMilestone per stage, which is a separate backend call.
-            // Without this, every "Release" button stays permanently disabled.
             const msRes = await apiFetch(`/api/disbursement/compliance/application/${appId}`, { method: 'POST' });
             if (!msRes.success) {
                 showToast('Schedule created, but compliance milestones failed: ' + msRes.error, 'error');
@@ -3521,12 +3621,12 @@
             navigate('finance_approver', 'disbursements');
         }
 
-        /** Completing a compliance milestone both marks it done AND releases the matching disbursement stage — that's the "release funds" action for Finance. */
-        async function faReleaseMilestone(milestoneId, appId) {
-            if (!milestoneId) { showToast('No compliance milestone found for this stage.', 'error'); return; }
-            const r = await apiFetch(`/api/disbursement/compliance/${milestoneId}/complete`, { method: 'PUT' });
+        /** Releases funds for an eligible disbursement schedule stage. */
+        async function faReleaseStage(scheduleId, appId) {
+            if (!scheduleId) { showToast('No schedule entry found for this stage.', 'error'); return; }
+            const r = await apiFetch(`/api/disbursement/schedules/${scheduleId}/release`, { method: 'POST' });
             if (!r.success) { showToast(r.error, 'error'); return; }
-            showToast('Stage funds released!', 'success');
+            showToast('Stage funds released successfully!', 'success');
             navigate('finance_approver', 'disbursements');
         }
 
@@ -3615,28 +3715,154 @@
             }
             const admin = meRes.data;
 
-            const [schemesRes, usersRes] = await Promise.all([
+            const [schemesRes, usersRes, reqsRes] = await Promise.all([
                 apiFetch('/api/v1/schemes'),
-                apiFetch('/api/v1/users')
+                apiFetch('/api/v1/users'),
+                apiFetch('/api/v1/admin/officer-registration-requests')
             ]);
             const schemeCount = schemesRes.success ? schemesRes.data.length : 0;
             const userCount = usersRes.success ? usersRes.data.length : 0;
+            const reqCount = reqsRes.success ? (reqsRes.data || []).length : 0;
 
             container.innerHTML = navbar(user) + '<div class="sidebar-layout">' +
                 sidebar([
                     { label: 'Overview', items: [{ key: 'overview', icon: '📊', label: 'Dashboard' }, { key: 'analytics', icon: '📈', label: 'Regional Analytics' }] },
-                    { label: 'Management', items: [{ key: 'applications', icon: '📂', label: 'All Applications' }, { key: 'schemes', icon: '📋', label: 'Schemes', count: schemeCount }, { key: 'users', icon: '👥', label: 'All Users', count: userCount }] },
+                    { label: 'Management', items: [{ key: 'officer-requests', icon: '👤', label: 'Officer Requests', count: reqCount }, { key: 'applications', icon: '📂', label: 'All Applications' }, { key: 'schemes', icon: '📋', label: 'Schemes', count: schemeCount }, { key: 'users', icon: '👥', label: 'All Users', count: userCount }] },
                     { label: 'Compliance', items: [{ key: 'decisions', icon: '📝', label: 'Recent Decisions' }, { key: 'reports', icon: '📑', label: 'Reports' }] }
                 ], sub) +
                 '<main class="main-content fade-in" id="ad-main"></main></div>';
             const m = document.getElementById('ad-main');
             if (sub === 'overview') adOverview(m, admin);
+            else if (sub === 'officer-requests') adOfficerRequests(m, admin);
             else if (sub === 'analytics') adAnalytics(m);
             else if (sub === 'applications') adApplications(m);
             else if (sub === 'schemes') adSchemes(m);
             else if (sub === 'users') adUsers(m);
             else if (sub === 'decisions') adDecisions(m);
             else if (sub === 'reports') adReports(m);
+        }
+
+        async function adOfficerRequests(m, admin) {
+            m.innerHTML = loadingBlock();
+            const res = await apiFetch('/api/v1/admin/officer-registration-requests/all');
+            if (!res.success) { m.innerHTML = errorBlock(res.error); return; }
+            const requests = res.data || [];
+            const pending = requests.filter(r => r.status === 'PENDING');
+            const processed = requests.filter(r => r.status !== 'PENDING');
+
+            const statusBadge = s => {
+                if (s === 'PENDING') return `<span class="badge badge-warning">⏳ Pending</span>`;
+                if (s === 'APPROVED') return `<span class="badge badge-success">✅ Approved</span>`;
+                return `<span class="badge badge-danger">❌ Rejected</span>`;
+            };
+
+            const roleBadge = r => {
+                if (r === 'FIELD_OFFICER') return `<span class="badge badge-info">🔍 Field Officer</span>`;
+                if (r === 'DISTRICT_OFFICER') return `<span class="badge badge-warning">📋 District Officer</span>`;
+                if (r === 'FINANCE_APPROVER') return `<span class="badge badge-success">💰 Finance Approver</span>`;
+                return `<span class="badge badge-secondary">${r}</span>`;
+            };
+
+            m.innerHTML = `
+  <div class="dash-header">
+    <div><h2>Officer Registration Requests 👤</h2><p>Review and approve pending officer and finance staff registration requests</p></div>
+    <div class="text-sm text-muted" style="text-align:right"><div style="font-size:22px;font-weight:800;color:var(--primary-light)">${pending.length}</div><div>Pending Requests</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:24px">
+    <div class="section-title">📋 Pending Officer Requests (${pending.length})</div>
+    ${pending.length === 0 ? `<div class="empty-state" style="padding:24px"><div class="e-icon">🎉</div><p style="font-size:13px">No pending officer registration requests to review.</p></div>` : `
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Applicant Name</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Requested Role</th>
+            <th>Region / State</th>
+            <th>Submitted At</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${pending.map(r => `
+            <tr>
+              <td><code>#${r.id}</code></td>
+              <td><strong>${r.fullName}</strong></td>
+              <td class="text-sm">${r.email}</td>
+              <td class="text-sm">${r.phone || '—'}</td>
+              <td>${roleBadge(r.requestedRole)}</td>
+              <td><strong>${r.region || 'All Regions'}</strong></td>
+              <td class="text-sm text-muted">${r.submittedAt ? r.submittedAt.replace('T', ' ').substring(0, 16) : '—'}</td>
+              <td>
+                <div style="display:flex;gap:6px">
+                  <button class="btn btn-success btn-sm" onclick="adApproveOfficerReq(${r.id})">✅ Approve</button>
+                  <button class="btn btn-danger btn-sm" onclick="adRejectOfficerReq(${r.id})">❌ Reject</button>
+                </div>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`}
+  </div>
+
+  ${processed.length > 0 ? `
+  <div class="card">
+    <div class="section-title">📜 Registration Request History (${processed.length})</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Applicant Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Region</th>
+            <th>Status</th>
+            <th>Reviewed Date</th>
+            <th>Reviewed By</th>
+            <th>Details / Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${processed.map(r => `
+            <tr>
+              <td><code>#${r.id}</code></td>
+              <td><strong>${r.fullName}</strong></td>
+              <td class="text-sm">${r.email}</td>
+              <td>${roleBadge(r.requestedRole)}</td>
+              <td>${r.region || 'All Regions'}</td>
+              <td>${statusBadge(r.status)}</td>
+              <td class="text-sm text-muted">${r.reviewedAt ? r.reviewedAt.replace('T', ' ').substring(0, 16) : '—'}</td>
+              <td class="text-sm">${r.reviewedByEmail || 'Admin'}</td>
+              <td class="text-sm text-muted">${r.rejectionReason || 'User Account Created'}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>` : ''}`;
+        }
+
+        async function adApproveOfficerReq(id) {
+            if (!confirm('Approve this officer registration request and create their user account?')) return;
+            const res = await apiFetch(`/api/v1/admin/officer-registration-requests/${id}/approve`, { method: 'POST' });
+            if (!res.success) { showToast(res.error, 'error'); return; }
+            showToast('Officer registration request APPROVED! User account created successfully. 🎉', 'success');
+            const m = document.getElementById('ad-main'); if (m) adOfficerRequests(m, currentUser());
+        }
+
+        async function adRejectOfficerReq(id) {
+            const reason = prompt('Enter rejection reason for this applicant:', 'Application incomplete or invalid credentials');
+            if (reason === null) return;
+            const res = await apiFetch(`/api/v1/admin/officer-registration-requests/${id}/reject`, {
+                method: 'POST',
+                body: JSON.stringify({ rejectionReason: reason })
+            });
+            if (!res.success) { showToast(res.error, 'error'); return; }
+            showToast('Officer registration request REJECTED.', 'info');
+            const m = document.getElementById('ad-main'); if (m) adOfficerRequests(m, currentUser());
         }
 
         async function adOverview(m, admin) {

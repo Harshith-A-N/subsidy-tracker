@@ -38,8 +38,9 @@ public class AuthService {
      */
     @Transactional
     public AuthResponseDto registerBeneficiary(RegisterRequestDto request) {
+        String email = request.getEmail() != null ? request.getEmail().trim().toLowerCase() : "";
         // Prevent duplicate email registration
-        userRepository.findByEmail(request.getEmail())
+        userRepository.findByEmail(email)
                 .ifPresent(existing -> {
                     throw new InvalidOperationException(
                             "An account with this email already exists.");
@@ -47,7 +48,7 @@ public class AuthService {
 
         User user = new User();
         user.setFullName(request.getFullName());
-        user.setEmail(request.getEmail());
+        user.setEmail(email);
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setRole(Role.BENEFICIARY);
         // region intentionally left null for beneficiaries
@@ -72,16 +73,17 @@ public class AuthService {
      * On failure, Spring Security throws AuthenticationException (handled by default).
      */
     public AuthResponseDto login(LoginRequestDto request) {
+        String email = request.getEmail() != null ? request.getEmail().trim().toLowerCase() : "";
         // This throws BadCredentialsException if authentication fails
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
-                        request.getEmail(),
+                        email,
                         request.getPassword()
                 )
         );
 
         // If we reach here, authentication succeeded — fetch the user for the response
-        User user = userRepository.findByEmail(request.getEmail())
+        User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new InvalidOperationException(
                         "User not found after successful authentication."));
 

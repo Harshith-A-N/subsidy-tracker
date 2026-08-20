@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 public class DocumentResponseDto {
     private Long id;
     private Long applicationId;
+    private Long stageId;
     private String documentType;
     private String filePath;
     private LocalDateTime uploadedAt;

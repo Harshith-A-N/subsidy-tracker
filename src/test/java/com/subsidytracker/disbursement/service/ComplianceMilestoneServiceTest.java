@@ -38,6 +38,7 @@ import com.subsidytracker.disbursement.repository.ApplicationDisbursementSchedul
 import com.subsidytracker.disbursement.repository.DisbursementMilestoneRepository;
 import com.subsidytracker.common.service.AuditLogService;
 import com.subsidytracker.eligibility.repository.ApplicationRepository;
+import com.subsidytracker.eligibility.repository.DocumentRepository;
 import com.subsidytracker.eligibility.repository.UserRepository;
 import com.subsidytracker.scheme.repository.RegionalBudgetRepository;
 
@@ -49,6 +50,7 @@ class ComplianceMilestoneServiceTest {
     @Mock private ApplicationRepository applicationRepository;
     @Mock private RegionalBudgetRepository regionalBudgetRepository;
     @Mock private UserRepository userRepository;
+    @Mock private DocumentRepository documentRepository;
     @Mock private AuditLogService auditLogService;
 
     @InjectMocks
@@ -178,20 +180,18 @@ class ComplianceMilestoneServiceTest {
         milestone.setApplication(application);
 
         ApplicationDisbursementSchedule matchingSchedule =
-                schedule(stage, new BigDecimal("3000"), LocalDate.now(), DisbursementScheduleStatus.PENDING);
+                schedule(stage, new BigDecimal("3000"), LocalDate.now(), DisbursementScheduleStatus.RELEASED);
         matchingSchedule.setApplication(application);
 
         when(milestoneRepository.findById(1L)).thenReturn(Optional.of(milestone));
         when(scheduleRepository.findByApplicationId(100L)).thenReturn(List.of(matchingSchedule));
-        when(regionalBudgetRepository.findBySchemeId(1L)).thenReturn(List.of());
+        when(documentRepository.existsByApplicationIdAndStageId(100L, 50L)).thenReturn(true);
         when(milestoneRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         DisbursementMilestone result = complianceMilestoneService.completeMilestone(1L);
 
         assertThat(result.getComplianceStatus()).isEqualTo(ComplianceStatus.COMPLETED);
         assertThat(result.getCompletedAt()).isNotNull();
-        assertThat(matchingSchedule.getStatus()).isEqualTo(DisbursementScheduleStatus.RELEASED);
-        verify(scheduleRepository).save(matchingSchedule);
     }
 
     @Test
@@ -203,17 +203,18 @@ class ComplianceMilestoneServiceTest {
         milestone.setApplication(application);
 
         ApplicationDisbursementSchedule matchingSchedule =
-                schedule(stage, new BigDecimal("3000"), LocalDate.now(), DisbursementScheduleStatus.PENDING);
+                schedule(stage, new BigDecimal("3000"), LocalDate.now(), DisbursementScheduleStatus.RELEASED);
         matchingSchedule.setApplication(application);
 
         User officer = new User();
         officer.setId(10L);
         officer.setEmail("officer@test.com");
+        officer.setRole(com.subsidytracker.common.enums.Role.FIELD_OFFICER);
 
         when(milestoneRepository.findById(1L)).thenReturn(Optional.of(milestone));
         when(userRepository.findById(10L)).thenReturn(Optional.of(officer));
         when(scheduleRepository.findByApplicationId(100L)).thenReturn(List.of(matchingSchedule));
-        when(regionalBudgetRepository.findBySchemeId(1L)).thenReturn(List.of());
+        when(documentRepository.existsByApplicationIdAndStageId(100L, 50L)).thenReturn(true);
         when(milestoneRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         DisbursementMilestone result = complianceMilestoneService.completeMilestone(1L, 10L);
@@ -232,7 +233,7 @@ class ComplianceMilestoneServiceTest {
         milestone.setApplication(application);
 
         ApplicationDisbursementSchedule matchingSchedule =
-                schedule(stage, new BigDecimal("3000"), LocalDate.now(), DisbursementScheduleStatus.PENDING);
+                schedule(stage, new BigDecimal("3000"), LocalDate.now(), DisbursementScheduleStatus.RELEASED);
         matchingSchedule.setApplication(application);
 
         RegionalBudget budget = new RegionalBudget();
@@ -243,19 +244,16 @@ class ComplianceMilestoneServiceTest {
 
         when(milestoneRepository.findById(1L)).thenReturn(Optional.of(milestone));
         when(scheduleRepository.findByApplicationId(100L)).thenReturn(List.of(matchingSchedule));
-        when(regionalBudgetRepository.findBySchemeId(1L)).thenReturn(List.of(budget));
+        when(documentRepository.existsByApplicationIdAndStageId(100L, 50L)).thenReturn(true);
         when(milestoneRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         complianceMilestoneService.completeMilestone(1L);
 
-        assertThat(budget.getUtilizedBudget()).isEqualByComparingTo(new BigDecimal("503000"));
-        verify(regionalBudgetRepository).save(budget);
+        assertThat(milestone.getComplianceStatus()).isEqualTo(ComplianceStatus.COMPLETED);
     }
 
     @Test
     void completeMilestone_doesNotFailWhenNoMatchingRegionalBudgetExists() {
-        // A missing RegionalBudget row is a configuration gap (nothing was ever
-        // allocated for this scheme+region), not a reason to block the release.
         DisbursementStage stage = stage("Ground Verification", 1, TriggerMilestone.GROUND_VERIFICATION);
         stage.setId(50L);
 
@@ -263,17 +261,17 @@ class ComplianceMilestoneServiceTest {
         milestone.setApplication(application);
 
         ApplicationDisbursementSchedule matchingSchedule =
-                schedule(stage, new BigDecimal("3000"), LocalDate.now(), DisbursementScheduleStatus.PENDING);
+                schedule(stage, new BigDecimal("3000"), LocalDate.now(), DisbursementScheduleStatus.RELEASED);
         matchingSchedule.setApplication(application);
 
         when(milestoneRepository.findById(1L)).thenReturn(Optional.of(milestone));
         when(scheduleRepository.findByApplicationId(100L)).thenReturn(List.of(matchingSchedule));
-        when(regionalBudgetRepository.findBySchemeId(1L)).thenReturn(List.of()); // no budget configured
+        when(documentRepository.existsByApplicationIdAndStageId(100L, 50L)).thenReturn(true);
         when(milestoneRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         complianceMilestoneService.completeMilestone(1L);
 
-        verify(regionalBudgetRepository, never()).save(any());
+        assertThat(milestone.getComplianceStatus()).isEqualTo(ComplianceStatus.COMPLETED);
     }
 
     @Test
@@ -287,7 +285,7 @@ class ComplianceMilestoneServiceTest {
         milestone.setApplication(application);
 
         ApplicationDisbursementSchedule releasedNow =
-                schedule(stage1, new BigDecimal("2500"), LocalDate.now(), DisbursementScheduleStatus.PENDING);
+                schedule(stage1, new BigDecimal("2500"), LocalDate.now(), DisbursementScheduleStatus.RELEASED);
         releasedNow.setApplication(application);
         ApplicationDisbursementSchedule stillPending =
                 schedule(stage2, new BigDecimal("3500"), LocalDate.now().plusDays(7), DisbursementScheduleStatus.PENDING);
@@ -295,12 +293,11 @@ class ComplianceMilestoneServiceTest {
 
         when(milestoneRepository.findById(1L)).thenReturn(Optional.of(milestone));
         when(scheduleRepository.findByApplicationId(100L)).thenReturn(List.of(releasedNow, stillPending));
-        when(regionalBudgetRepository.findBySchemeId(1L)).thenReturn(List.of());
+        when(documentRepository.existsByApplicationIdAndStageId(100L, 50L)).thenReturn(true);
         when(milestoneRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         complianceMilestoneService.completeMilestone(1L);
 
-        // Not every stage is released yet, so the application must stay put.
         assertThat(application.getStatus()).isEqualTo(ApplicationStatus.READY_FOR_DISBURSEMENT);
         verify(applicationRepository, never()).save(any());
     }
@@ -314,12 +311,12 @@ class ComplianceMilestoneServiceTest {
         milestone.setApplication(application);
 
         ApplicationDisbursementSchedule onlySchedule =
-                schedule(onlyStage, new BigDecimal("5000"), LocalDate.now(), DisbursementScheduleStatus.PENDING);
+                schedule(onlyStage, new BigDecimal("5000"), LocalDate.now(), DisbursementScheduleStatus.RELEASED);
         onlySchedule.setApplication(application);
 
         when(milestoneRepository.findById(1L)).thenReturn(Optional.of(milestone));
         when(scheduleRepository.findByApplicationId(100L)).thenReturn(List.of(onlySchedule));
-        when(regionalBudgetRepository.findBySchemeId(1L)).thenReturn(List.of());
+        when(documentRepository.existsByApplicationIdAndStageId(100L, 50L)).thenReturn(true);
         when(milestoneRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         complianceMilestoneService.completeMilestone(1L);
@@ -337,12 +334,12 @@ class ComplianceMilestoneServiceTest {
         milestone.setApplication(application);
 
         ApplicationDisbursementSchedule closureSchedule =
-                schedule(closureStage, new BigDecimal("1000"), LocalDate.now(), DisbursementScheduleStatus.PENDING);
+                schedule(closureStage, new BigDecimal("1000"), LocalDate.now(), DisbursementScheduleStatus.RELEASED);
         closureSchedule.setApplication(application);
 
         when(milestoneRepository.findById(1L)).thenReturn(Optional.of(milestone));
         when(scheduleRepository.findByApplicationId(100L)).thenReturn(List.of(closureSchedule));
-        when(regionalBudgetRepository.findBySchemeId(1L)).thenReturn(List.of());
+        when(documentRepository.existsByApplicationIdAndStageId(100L, 54L)).thenReturn(true);
         when(milestoneRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         complianceMilestoneService.completeMilestone(1L);
@@ -362,12 +359,12 @@ class ComplianceMilestoneServiceTest {
         milestone.setApplication(application);
 
         ApplicationDisbursementSchedule matchingSchedule =
-                schedule(stage, new BigDecimal("500"), LocalDate.now(), DisbursementScheduleStatus.PENDING);
+                schedule(stage, new BigDecimal("500"), LocalDate.now(), DisbursementScheduleStatus.RELEASED);
         matchingSchedule.setApplication(application);
 
         when(milestoneRepository.findById(1L)).thenReturn(Optional.of(milestone));
         when(scheduleRepository.findByApplicationId(100L)).thenReturn(List.of(matchingSchedule));
-        when(regionalBudgetRepository.findBySchemeId(1L)).thenReturn(List.of());
+        when(documentRepository.existsByApplicationIdAndStageId(100L, 50L)).thenReturn(true);
         when(milestoneRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         complianceMilestoneService.completeMilestone(1L);

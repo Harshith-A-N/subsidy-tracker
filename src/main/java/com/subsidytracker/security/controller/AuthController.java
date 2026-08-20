@@ -2,8 +2,11 @@ package com.subsidytracker.security.controller;
 
 import com.subsidytracker.security.dto.AuthResponseDto;
 import com.subsidytracker.security.dto.LoginRequestDto;
+import com.subsidytracker.security.dto.OfficerRegistrationRequestDto;
+import com.subsidytracker.security.dto.OfficerRegistrationResponseDto;
 import com.subsidytracker.security.dto.RegisterRequestDto;
 import com.subsidytracker.security.service.AuthService;
+import com.subsidytracker.security.service.OfficerRegistrationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -13,9 +16,12 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final OfficerRegistrationService officerRegistrationService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService,
+                          OfficerRegistrationService officerRegistrationService) {
         this.authService = authService;
+        this.officerRegistrationService = officerRegistrationService;
     }
 
     /**
@@ -25,6 +31,16 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<AuthResponseDto> register(@RequestBody RegisterRequestDto request) {
         AuthResponseDto response = authService.registerBeneficiary(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * Public endpoint — submits a request for officer registration (FIELD_OFFICER, DISTRICT_OFFICER, FINANCE_APPROVER).
+     * No user account is created until an Admin approves the request.
+     */
+    @PostMapping("/officer-register")
+    public ResponseEntity<OfficerRegistrationResponseDto> registerOfficer(@RequestBody OfficerRegistrationRequestDto request) {
+        OfficerRegistrationResponseDto response = officerRegistrationService.submitRequest(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

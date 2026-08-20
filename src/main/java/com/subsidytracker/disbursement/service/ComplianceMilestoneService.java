@@ -18,6 +18,7 @@ import com.subsidytracker.common.enums.ComplianceStatus;
 import com.subsidytracker.common.enums.DisbursementScheduleStatus;
 import com.subsidytracker.common.enums.DisbursementStatus;
 import com.subsidytracker.common.enums.MilestoneType;
+import com.subsidytracker.common.enums.Role;
 import com.subsidytracker.common.enums.TriggerMilestone;
 import com.subsidytracker.common.exception.InvalidOperationException;
 import com.subsidytracker.common.exception.ResourceNotFoundException;
@@ -27,6 +28,7 @@ import com.subsidytracker.disbursement.entity.DisbursementStage;
 import com.subsidytracker.disbursement.repository.ApplicationDisbursementScheduleRepository;
 import com.subsidytracker.disbursement.repository.DisbursementMilestoneRepository;
 import com.subsidytracker.eligibility.repository.ApplicationRepository;
+import com.subsidytracker.eligibility.repository.DocumentRepository;
 import com.subsidytracker.eligibility.repository.UserRepository;
 import com.subsidytracker.scheme.repository.RegionalBudgetRepository;
 import com.subsidytracker.common.service.AuditLogService;
@@ -39,6 +41,7 @@ public class ComplianceMilestoneService {
     private final ApplicationRepository applicationRepository;
     private final RegionalBudgetRepository regionalBudgetRepository;
     private final UserRepository userRepository;
+    private final DocumentRepository documentRepository;
     private final AuditLogService auditLogService;
 
     public ComplianceMilestoneService(
@@ -47,6 +50,7 @@ public class ComplianceMilestoneService {
             ApplicationRepository applicationRepository,
             RegionalBudgetRepository regionalBudgetRepository,
             UserRepository userRepository,
+            DocumentRepository documentRepository,
             AuditLogService auditLogService) {
 
         this.milestoneRepository = milestoneRepository;
@@ -54,6 +58,7 @@ public class ComplianceMilestoneService {
         this.applicationRepository = applicationRepository;
         this.regionalBudgetRepository = regionalBudgetRepository;
         this.userRepository = userRepository;
+        this.documentRepository = documentRepository;
         this.auditLogService = auditLogService;
     }
 
@@ -110,13 +115,6 @@ public class ComplianceMilestoneService {
                     milestone.setScheduledAmount(
                             schedule.getScheduledAmount());
 
-                    // Previously recomputed the staggered due date here
-                    // independently of ScheduleGenerationService (which used
-                    // to just hardcode LocalDate.now() on the schedule side).
-                    // Now both sides derive from the same
-                    // ApplicationDisbursementSchedule.dueDate, so the schedule
-                    // API and the milestone tracker can never show different
-                    // dates for the same stage again.
                     milestone.setDueDate(schedule.getDueDate());
 
                     milestone.setComplianceStatus(
@@ -134,7 +132,6 @@ public class ComplianceMilestoneService {
 
     /**
      * Mark a compliance milestone as completed using authenticated security context.
-     * Completing it releases the corresponding disbursement stage.
      */
     @Transactional
     public DisbursementMilestone completeMilestone(Long milestoneId) {
@@ -143,8 +140,7 @@ public class ComplianceMilestoneService {
     }
 
     /**
-     * Mark a compliance milestone as completed by a specific user.
-     * Completing it releases the corresponding disbursement stage.
+     * Mark a compliance milestone as completed by an authorized officer.
      */
     @Transactional
     public DisbursementMilestone completeMilestone(Long milestoneId, Long completedByUserId) {
@@ -156,83 +152,55 @@ public class ComplianceMilestoneService {
                                         "DisbursementMilestone",
                                         milestoneId));
 
-        if (milestone.getComplianceStatus()
-                == ComplianceStatus.COMPLETED) {
+        if (milestone.getComplianceStatus() == ComplianceStatus.COMPLETED) {
             return milestone;
         }
 
-        /*
-         * Overdue is a PAUSE, not a permanent block — per the project guide's
-         * Module 3 flow: "Missed Due Date? -> Non-Compliance Flag -> Reminder
-         * Sent -> Release Paused". A beneficiary who was late but eventually
-         * satisfies the milestone should still be able to have it completed
-         * and released; there was previously no path out of OVERDUE at all.
-         */
-
-        milestone.setComplianceStatus(
-                ComplianceStatus.COMPLETED);
-
-        milestone.setCompletedAt(
-                LocalDateTime.now());
-
+        User completedBy = null;
         if (completedByUserId != null) {
-            User completedBy = userRepository.findById(completedByUserId)
+            completedBy = userRepository.findById(completedByUserId)
                     .orElseThrow(() -> new ResourceNotFoundException("User", completedByUserId));
-            milestone.setCompletedBy(completedBy);
+
+            if (completedBy.getRole() == Role.FINANCE_APPROVER) {
+                throw new InvalidOperationException("Finance Approvers are not permitted to complete compliance milestones. Officers must verify compliance proof.");
+            }
+
+            if (completedBy.getRole() == Role.FIELD_OFFICER || completedBy.getRole() == Role.DISTRICT_OFFICER) {
+                String benRegion = milestone.getApplication().getBeneficiary().getRegion();
+                String offRegion = completedBy.getRegion();
+                if (benRegion != null && offRegion != null && !benRegion.equalsIgnoreCase(offRegion)) {
+                    throw new InvalidOperationException("This application is not in your assigned region.");
+                }
+            }
         }
 
-        /*
-         * Release the corresponding disbursement stage.
-         * This is the simulated fund release required by Milestone 3.
-         */
         List<ApplicationDisbursementSchedule> schedules =
                 scheduleRepository.findByApplicationId(
                         milestone.getApplication().getId());
 
-        schedules.stream()
-                .filter(schedule ->
-                        schedule.getStage().getId()
-                                .equals(milestone.getStage().getId()))
+        ApplicationDisbursementSchedule schedule = schedules.stream()
+                .filter(s -> s.getStage().getId().equals(milestone.getStage().getId()))
                 .findFirst()
-                .ifPresent(schedule -> {
-                    schedule.setStatus(
-                            DisbursementScheduleStatus.RELEASED);
-                    scheduleRepository.save(schedule);
+                .orElseThrow(() -> new InvalidOperationException("No schedule entry found for stage."));
 
-                    /*
-                     * RegionalBudget.utilizedBudget was always initialized to
-                     * zero and never updated anywhere afterward — meaning any
-                     * screen reading it directly (not via the analytics
-                     * region-utilization query, which computes this figure
-                     * live from released schedules) would show 0 forever,
-                     * regardless of real disbursement activity. Fix that here,
-                     * at the one place a release actually happens.
-                     */
-                    String region = milestone.getApplication()
-                            .getBeneficiary().getRegion();
-                    Long schemeId = milestone.getApplication()
-                            .getScheme().getId();
+        if (schedule.getStatus() != DisbursementScheduleStatus.RELEASED) {
+            throw new InvalidOperationException("Funds for stage '" + milestone.getStage().getStageName()
+                    + "' must be released before compliance can be completed.");
+        }
 
-                    if (region != null) {
-                        regionalBudgetRepository.findBySchemeId(schemeId)
-                                .stream()
-                                .filter(rb -> region.equalsIgnoreCase(rb.getRegionName()))
-                                .findFirst()
-                                .ifPresent(rb -> {
-                                    BigDecimal current = rb.getUtilizedBudget() != null
-                                            ? rb.getUtilizedBudget() : BigDecimal.ZERO;
-                                    rb.setUtilizedBudget(current.add(schedule.getScheduledAmount()));
-                                    regionalBudgetRepository.save(rb);
-                                });
-                        // No matching RegionalBudget row is a configuration
-                        // gap (no budget was ever allocated for this
-                        // scheme+region), not a reason to block the release.
-                    }
-                });
+        boolean hasProof = documentRepository.existsByApplicationIdAndStageId(
+                milestone.getApplication().getId(), milestone.getStage().getId());
+        if (!hasProof) {
+            throw new InvalidOperationException("No utilization proof has been uploaded for stage '"
+                    + milestone.getStage().getStageName() + "'. Officer verification requires proof.");
+        }
 
-        // Reuses the `schedules` list above: the entry we just released was
-        // mutated in place (same managed entity), so this reflects the
-        // post-release state without a second query.
+        milestone.setComplianceStatus(ComplianceStatus.COMPLETED);
+        milestone.setCompletedAt(LocalDateTime.now());
+        if (completedBy != null) {
+            milestone.setCompletedBy(completedBy);
+        }
+
         advanceApplicationStatusIfFullyDisbursed(milestone, schedules);
 
         DisbursementMilestone saved = milestoneRepository.save(milestone);

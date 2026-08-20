@@ -15,4 +15,5 @@ public class DisbursementStageResponse {
     private Integer sequenceNumber;
     private BigDecimal percentageOfGrant;
     private TriggerMilestone triggerMilestone;
+    private Integer dueDateOffsetDays;
 }

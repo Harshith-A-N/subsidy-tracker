@@ -41,9 +41,10 @@ public class DocumentController {
     public ResponseEntity<DocumentResponseDto> upload(@PathVariable Long applicationId,
                                                       @RequestParam String documentType,
                                                       @RequestParam("file") MultipartFile file,
+                                                      @RequestParam(required = false) Long stageId,
                                                       Authentication authentication) {
         long userId = resolveUserId(authentication);
-        DocumentResponseDto saved = documentService.uploadDocument(applicationId, documentType, file, userId);
+        DocumentResponseDto saved = documentService.uploadDocument(applicationId, documentType, file, userId, stageId);
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
 
@@ -67,7 +68,14 @@ public class DocumentController {
         long userId = resolveUserId(authentication);
         Document document = documentService.getDocumentFileForDownload(applicationId, documentId, userId);
 
-        Path filePath = Paths.get(document.getFilePath()).normalize();
+        String pathOrUrl = document.getFilePath();
+        if (pathOrUrl != null && (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://"))) {
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .header(HttpHeaders.LOCATION, pathOrUrl)
+                    .build();
+        }
+
+        Path filePath = Paths.get(pathOrUrl).normalize();
         if (!Files.exists(filePath)) {
             return ResponseEntity.notFound().build();
         }

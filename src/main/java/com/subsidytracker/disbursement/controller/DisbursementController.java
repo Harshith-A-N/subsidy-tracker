@@ -99,6 +99,14 @@ public class DisbursementController {
         return ResponseEntity.status(HttpStatus.CREATED).body(toScheduleResponseList(schedules));
     }
 
+    @PostMapping("/schedules/{scheduleId}/release")
+    public ResponseEntity<ScheduleEntryResponse> releaseStage(@PathVariable Long scheduleId,
+                                                             Authentication authentication) {
+        long userId = resolveUserId(authentication);
+        ApplicationDisbursementSchedule schedule = scheduleGenerationService.releaseStage(scheduleId, userId);
+        return ResponseEntity.ok(toScheduleResponse(schedule));
+    }
+
     // ---------- Schedule Retrieval ----------
 
     /**
@@ -124,6 +132,7 @@ public class DisbursementController {
                     stage.setSequenceNumber(r.getSequenceNumber());
                     stage.setPercentageOfGrant(r.getPercentageOfGrant());
                     stage.setTriggerMilestone(r.getTriggerMilestone());
+                    stage.setDueDateOffsetDays(r.getDueDateOffsetDays());
                     return stage;
                 })
                 .toList();
@@ -151,6 +160,7 @@ public class DisbursementController {
         response.setSequenceNumber(stage.getSequenceNumber());
         response.setPercentageOfGrant(stage.getPercentageOfGrant());
         response.setTriggerMilestone(stage.getTriggerMilestone());
+        response.setDueDateOffsetDays(stage.getDueDateOffsetDays());
         return response;
     }
 
