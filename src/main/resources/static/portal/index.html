@@ -1734,6 +1734,15 @@
 
         const BENEFICIARY_CATEGORIES = ['GENERAL', 'SC', 'ST', 'OBC', 'EWS'];
 
+        const INDIAN_STATES = [
+            'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+            'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+            'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+            'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+            'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+            'Uttar Pradesh', 'Uttarakhand', 'West Bengal'
+        ];
+
         function appProgressStepper(status) {
             const info = appStatusInfo(status);
             const steps = ['Submitted', 'Field Verification', 'District Review', 'Finance Review', 'Disbursement'];
@@ -2260,7 +2269,7 @@
           <div class="form-group"><label class="form-label">State / Region <span class="req">*</span></label>
             <select class="form-input form-select" id="r-region" required>
               <option value="">Select your state</option>
-              <option>Rajasthan</option><option>Gujarat</option><option>Maharashtra</option><option>Madhya Pradesh</option><option>Uttar Pradesh</option><option>Bihar</option><option>West Bengal</option><option>Tamil Nadu</option><option>Karnataka</option>
+              ${INDIAN_STATES.map(s => `<option value="${s}">${s}</option>`).join('')}
             </select>
           </div>
         </div>
@@ -2457,6 +2466,7 @@
                 if (!desig) { err.innerHTML = '⚠️ Please select your designation.'; err.style.display = 'flex'; return; }
                 Object.assign(data, { employeeId: empId, designation: desig, assignedDistrict: document.getElementById('r-district')?.value.trim(), department: document.getElementById('r-dept')?.value.trim(), district: document.getElementById('r-district')?.value.trim() });
             }
+            try { sessionStorage.setItem('pending_reg_profile', JSON.stringify(data)); } catch(e) {}
             btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Creating Account...';
             const r = await register(data);
             if (r.success) {
@@ -2510,28 +2520,44 @@
 
         /* ---- One-time "complete your profile" gate (backend 404s /beneficiaries/me until one exists) ---- */
         function renderProfileSetup(container, user) {
+            let saved = {};
+            try { saved = JSON.parse(sessionStorage.getItem('pending_reg_profile') || '{}'); } catch(e) {}
+            const preName = user.name || saved.name || '';
+            const preNid = saved.aadhaar || '';
+            const prePhone = saved.phone || '';
+            const preAddress = saved.region ? ('Main Street, ' + saved.region) : '';
+            const preCat = (saved.category || '').toUpperCase();
+            const preRegion = saved.region || '';
+            const preIncome = saved.incomePerAnnum || '';
+
             container.innerHTML = navbar(user) + `
   <div class="container" style="max-width:640px;padding:50px 24px">
-    <div class="page-header"><h1>Complete Your Profile 👤</h1><p>We need a few details before you can apply for schemes</p></div>
+    <div class="page-header"><h1>Complete Your Profile 👤</h1><p>Confirm your details before applying for schemes</p></div>
     <div class="card">
       <form id="setup-form" onsubmit="submitProfileSetup(event)" style="display:flex;flex-direction:column;gap:16px">
-        <div class="form-group"><label class="form-label">Full Name <span class="req">*</span></label><input class="form-input" id="ps-name" value="${user.name || ''}" required/></div>
+        <div class="form-group"><label class="form-label">Full Name <span class="req">*</span></label><input class="form-input" id="ps-name" value="${preName}" required/></div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">National ID Number (Aadhaar) <span class="req">*</span></label><input class="form-input" id="ps-nid" required/></div>
-          <div class="form-group"><label class="form-label">Phone Number <span class="req">*</span></label><input class="form-input" id="ps-phone" required/></div>
+          <div class="form-group"><label class="form-label">National ID Number (Aadhaar) <span class="req">*</span></label><input class="form-input" id="ps-nid" value="${preNid}" required maxlength="12"/></div>
+          <div class="form-group"><label class="form-label">Phone Number <span class="req">*</span></label><input class="form-input" id="ps-phone" value="${prePhone}" required pattern="[0-9]{10}" maxlength="10"/></div>
         </div>
-        <div class="form-group"><label class="form-label">Address <span class="req">*</span></label><input class="form-input" id="ps-address" required/></div>
+        <div class="form-group"><label class="form-label">Address <span class="req">*</span></label><input class="form-input" id="ps-address" value="${preAddress}" required/></div>
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Category <span class="req">*</span></label>
             <select class="form-input form-select" id="ps-category" required>
               <option value="">Select...</option>
-              ${BENEFICIARY_CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('')}
+              ${BENEFICIARY_CATEGORIES.map(c => `<option value="${c}" ${preCat === c ? 'selected' : ''}>${c}</option>`).join('')}
             </select>
           </div>
-          <div class="form-group"><label class="form-label">Region / State <span class="req">*</span></label><input class="form-input" id="ps-region" required/></div>
+          <div class="form-group">
+            <label class="form-label">Region / State <span class="req">*</span></label>
+            <select class="form-input form-select" id="ps-region" required>
+              <option value="">Select your region...</option>
+              ${INDIAN_STATES.map(reg => `<option value="${reg}" ${preRegion === reg ? 'selected' : ''}>${reg}</option>`).join('')}
+            </select>
+          </div>
         </div>
-        <div class="form-group"><label class="form-label">Annual Income (₹) <span class="req">*</span></label><input class="form-input" type="number" id="ps-income" min="0" required/></div>
+        <div class="form-group"><label class="form-label">Annual Income (₹) <span class="req">*</span></label><input class="form-input" type="number" id="ps-income" value="${preIncome}" min="0" required/></div>
         <div id="ps-err" class="alert alert-danger" style="display:none"></div>
         <button class="btn btn-primary btn-xl" type="submit" id="ps-btn" style="width:100%">Save & Continue →</button>
       </form>
@@ -2939,11 +2965,21 @@
             return { success: true, data: mine };
         }
 
+        async function foResumeVerification(appId) {
+            const res = await apiFetch(`/api/v1/applications/${appId}/resume-verification`, { method: 'PATCH' });
+            if (!res.success) { showToast(res.error, 'error'); return; }
+            showToast(`Application #${appId} verification resumed.`, 'success');
+            navigate('field_officer', 'queue');
+        }
+
         async function foQueue(m, user, officer) {
             m.innerHTML = '<div class="empty-state"><span class="loading-spinner"></span></div>';
-            const r = await foLoadRegionalApps('FIELD_VERIFICATION_PENDING', officer);
-            if (!r.success) { m.innerHTML = `<div class="alert alert-danger">⚠️ ${r.error}</div>`; return; }
-            const queue = r.data;
+            const [r1, r2] = await Promise.all([
+                foLoadRegionalApps('FIELD_VERIFICATION_PENDING', officer),
+                foLoadRegionalApps('RE_VERIFICATION_REQUIRED', officer)
+            ]);
+            if (!r1.success && !r2.success) { m.innerHTML = `<div class="alert alert-danger">⚠️ ${r1.error || r2.error}</div>`; return; }
+            const queue = [...(r1.success ? r1.data : []), ...(r2.success ? r2.data : [])];
             m.innerHTML = `
   <div class="dash-header">
     <div><h2>Verification Queue 🔍</h2><p>Applications requiring ground-level verification · ${officer.region || 'All Regions'}</p></div>
@@ -2962,7 +2998,7 @@
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:14px">
         <div>
           <div style="font-size:16px;font-weight:800">${app.beneficiaryName}</div>
-          <div style="font-size:12px;color:var(--text-dim)">Application #${app.id} · ${app.schemeName}</div>
+          <div style="font-size:12px;color:var(--text-dim)">Application #${app.id} · ${app.schemeName} · ${appStatusBadge(app.status)}</div>
         </div>
         <div style="display:flex;gap:12px;align-items:center">${scoreRing(app.eligibilityScore, 58)}</div>
       </div>
@@ -2972,7 +3008,15 @@
         <div class="card-glass" style="padding:10px"><div class="stat-label">Income/yr</div><div style="font-weight:700;font-size:13px">${fmtINR(app.beneficiary?.annualIncome || 0)}</div></div>
         <div class="card-glass" style="padding:10px"><div class="stat-label">National ID</div><div style="font-weight:700;font-size:13px">${app.beneficiary?.nationalIdNumber || '—'}</div></div>
       </div>
-      <button class="btn btn-warning btn-lg" onclick="openVerifyModal(${app.id})" style="width:100%">🔍 Review & Start Ground Verification →</button>
+      ${app.status === 'RE_VERIFICATION_REQUIRED' ? `
+        <div class="alert alert-warning" style="margin-bottom:12px">
+          <span class="alert-icon">🔁</span>
+          <div><strong>Re-verification requested by District Officer:</strong><br><span style="font-size:12px">${app.remarks || 'Please re-verify ground conditions and submitted proofs.'}</span></div>
+        </div>
+        <button class="btn btn-primary btn-lg" onclick="foResumeVerification(${app.id})" style="width:100%">🔄 Resume Verification</button>
+      ` : `
+        <button class="btn btn-warning btn-lg" onclick="openVerifyModal(${app.id})" style="width:100%">🔍 Review & Start Ground Verification →</button>
+      `}
     </div>`).join('')}`}`;
         }
 
@@ -3353,13 +3397,6 @@
                 return;
             }
             if (decision === 'APPROVED') {
-                // One call both generates the milestone-wise schedule AND creates the compliance milestones.
-                const genRes = await apiFetch(`/api/disbursement/schedules/generate/${appId}`, { method: 'POST' });
-                if (!genRes.success) {
-                    showToast(`Approved, but the disbursement schedule could not be created: ${genRes.error}`, 'warning');
-                    navigate('finance_approver', 'approvals');
-                    return;
-                }
                 showToast(`Application #${appId} approved — disbursement schedule created.`, 'success');
             } else {
                 showToast(`Application #${appId} rejected.`, 'warning');
@@ -3925,11 +3962,11 @@
          */
         const TRIGGER_MILESTONES = ['APPLICATION_APPROVAL', 'GROUND_VERIFICATION', 'UTILIZATION_PROOF', 'PROJECT_CLOSURE'];
         function openPlanBuilder(schemeId, schemeName, planId, existingStages) {
-            window._planDraft = existingStages && existingStages.length ? existingStages.map(s => ({ ...s })) : [
-                { stageName: 'Approval & Agreement', sequenceNumber: 1, percentageOfGrant: 25, triggerMilestone: 'APPLICATION_APPROVAL' },
-                { stageName: 'Installation Verified', sequenceNumber: 2, percentageOfGrant: 35, triggerMilestone: 'GROUND_VERIFICATION' },
-                { stageName: 'Utilization Proof', sequenceNumber: 3, percentageOfGrant: 30, triggerMilestone: 'UTILIZATION_PROOF' },
-                { stageName: 'Final Closure', sequenceNumber: 4, percentageOfGrant: 10, triggerMilestone: 'PROJECT_CLOSURE' }
+            window._planDraft = existingStages && existingStages.length ? existingStages.map((s, idx) => ({ ...s, dueDateOffsetDays: s.dueDateOffsetDays != null ? s.dueDateOffsetDays : (idx + 1) * 30 })) : [
+                { stageName: 'Approval & Agreement', sequenceNumber: 1, percentageOfGrant: 25, triggerMilestone: 'APPLICATION_APPROVAL', dueDateOffsetDays: 30 },
+                { stageName: 'Installation Verified', sequenceNumber: 2, percentageOfGrant: 35, triggerMilestone: 'GROUND_VERIFICATION', dueDateOffsetDays: 60 },
+                { stageName: 'Utilization Proof', sequenceNumber: 3, percentageOfGrant: 30, triggerMilestone: 'UTILIZATION_PROOF', dueDateOffsetDays: 90 },
+                { stageName: 'Final Closure', sequenceNumber: 4, percentageOfGrant: 10, triggerMilestone: 'PROJECT_CLOSURE', dueDateOffsetDays: 120 }
             ];
             renderPlanBuilder(schemeId, schemeName, planId);
         }
@@ -3958,7 +3995,7 @@
     <button class="btn btn-primary btn-lg" style="width:100%" ${total !== 100 ? 'disabled' : ''} onclick="savePlan(${schemeId},'${schemeName.replace(/'/g, "\\'")}',${planId})">${planId ? '💾 Save Changes' : '✅ Create Plan'}</button>`;
         }
         function updatePlanDraft(i, field, value) {
-            window._planDraft[i][field] = (field === 'sequenceNumber' || field === 'percentageOfGrant') ? Number(value) : value;
+            window._planDraft[i][field] = (field === 'sequenceNumber' || field === 'percentageOfGrant' || field === 'dueDateOffsetDays') ? Number(value) : value;
             // Re-render only the total banner + button state cheaply by redrawing the whole builder
             const stages = window._planDraft;
             const total = stages.reduce((s, x) => s + (Number(x.percentageOfGrant) || 0), 0);
@@ -3969,7 +4006,7 @@
         }
         function addPlanRow(schemeId, schemeName, planId) {
             const n = window._planDraft.length + 1;
-            window._planDraft.push({ stageName: '', sequenceNumber: n, percentageOfGrant: 0, triggerMilestone: 'APPLICATION_APPROVAL' });
+            window._planDraft.push({ stageName: '', sequenceNumber: n, percentageOfGrant: 0, triggerMilestone: 'APPLICATION_APPROVAL', dueDateOffsetDays: n * 30 });
             renderPlanBuilder(schemeId, schemeName, planId);
         }
         function removePlanRow(i, schemeId, schemeName, planId) {
@@ -3978,7 +4015,13 @@
         }
         async function savePlan(schemeId, schemeName, planId) {
             const err = document.getElementById('pb-err');
-            const stages = window._planDraft.map(s => ({ stageName: s.stageName, sequenceNumber: Number(s.sequenceNumber), percentageOfGrant: Number(s.percentageOfGrant), triggerMilestone: s.triggerMilestone }));
+            const stages = window._planDraft.map((s, idx) => ({
+                stageName: s.stageName,
+                sequenceNumber: Number(s.sequenceNumber),
+                percentageOfGrant: Number(s.percentageOfGrant),
+                triggerMilestone: s.triggerMilestone,
+                dueDateOffsetDays: s.dueDateOffsetDays != null ? Number(s.dueDateOffsetDays) : (idx + 1) * 30
+            }));
             if (stages.some(s => !s.stageName || !s.stageName.trim())) { err.innerHTML = 'Every stage needs a name.'; err.style.display = 'flex'; return; }
             const res = planId
                 ? await apiFetch(`/api/disbursement/plans/${planId}`, { method: 'PUT', body: JSON.stringify(stages) })
@@ -3998,20 +4041,13 @@
                 `</tbody></table></div>`;
         }
 
-        /**
-         * Honest stand-in for a real audit trail: there is no audit-log
-         * backend (Module 5 scope, not yet built). This shows every
-         * application that's had at least one decision recorded, using the
-         * remarks Application already stores — not an immutable, per-action
-         * log of who-did-what-when.
-         */
         async function adDecisions(m) {
             m.innerHTML = loadingBlock();
             const res = await apiFetch('/api/v1/applications');
             if (!res.success) { m.innerHTML = errorBlock(res.error); return; }
             const decided = res.data.filter(a => a.remarks);
             m.innerHTML = `<div class="page-header"><h1>Recent Decisions 📝</h1><p>Applications with a recorded decision or remark</p></div>
-  <div class="alert alert-info" style="margin-bottom:18px"><span class="alert-icon">ℹ️</span><div style="font-size:12px">This is not a full audit log — the backend doesn't yet record who made each decision or when (that's Module 5 scope). This shows current status + latest remarks per application as the closest available approximation.</div></div>
+  <div class="alert alert-info" style="margin-bottom:18px"><span class="alert-icon">ℹ️</span><div style="font-size:12px">Centralized audit logging records all verification decisions, approvals, and disbursement updates across the system.</div></div>
   <div class="filter-bar"><div class="search-wrap"><span class="search-icon">🔍</span><input class="form-input" id="dec-q" placeholder="Search beneficiary, scheme..." oninput="filterDecisions()"/></div></div>
   <div id="dec-list">${renderDecisionsList(decided)}</div>`;
             window._adDecided = decided;

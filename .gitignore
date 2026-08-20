@@ -68,3 +68,7 @@ application.properties
 src/main/resources/application.properties
 .env
 uploads/documents/
+
+# Temporary directories
+.tmp/*
+!.tmp/.gitkeep

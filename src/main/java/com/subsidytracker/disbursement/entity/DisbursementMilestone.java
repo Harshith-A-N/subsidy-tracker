@@ -2,6 +2,7 @@ package com.subsidytracker.disbursement.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.subsidytracker.common.entity.Application;
+import com.subsidytracker.common.entity.User;
 import com.subsidytracker.common.enums.ComplianceStatus;
 import com.subsidytracker.common.enums.DisbursementStatus;
 import com.subsidytracker.common.enums.MilestoneType;
@@ -59,4 +60,8 @@ public class DisbursementMilestone {
     private LocalDate actualDisbursedDate;
 
     private LocalDateTime completedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "completed_by")
+    private User completedBy;
 }

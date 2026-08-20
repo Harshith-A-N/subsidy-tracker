@@ -22,6 +22,9 @@ import com.subsidytracker.disbursement.repository.DisbursementStageRepository;
 import com.subsidytracker.eligibility.repository.ApplicationRepository;
 import com.subsidytracker.scheme.repository.SchemeSlabRepository;
 
+import com.subsidytracker.common.entity.User;
+import com.subsidytracker.common.service.AuditLogService;
+
 @Service
 public class ScheduleGenerationService {
 
@@ -36,18 +39,21 @@ public class ScheduleGenerationService {
     private final DisbursementStageRepository stageRepository;
     private final ApplicationDisbursementScheduleRepository scheduleRepository;
     private final SchemeSlabRepository schemeSlabRepository;
+    private final AuditLogService auditLogService;
 
     public ScheduleGenerationService(ApplicationRepository applicationRepository,
                                      DisbursementPlanRepository planRepository, ComplianceMilestoneService complianceMilestoneService,
                                      DisbursementStageRepository stageRepository,
                                      ApplicationDisbursementScheduleRepository scheduleRepository,
-                                     SchemeSlabRepository schemeSlabRepository) {
+                                     SchemeSlabRepository schemeSlabRepository,
+                                     AuditLogService auditLogService) {
         this.applicationRepository = applicationRepository;
         this.planRepository = planRepository;
         this.complianceMilestoneService = complianceMilestoneService;
         this.stageRepository = stageRepository;
         this.scheduleRepository = scheduleRepository;
         this.schemeSlabRepository = schemeSlabRepository;
+        this.auditLogService = auditLogService;
     }
 
     // ---------- Public API ----------
@@ -70,6 +76,17 @@ public class ScheduleGenerationService {
                 scheduleRepository.saveAll(schedules);
 
         complianceMilestoneService.createMilestones(applicationId);
+
+        try {
+            auditLogService.logEvent(
+                    "ApplicationDisbursementSchedule",
+                    applicationId,
+                    "SCHEDULE_GENERATED",
+                    (User) null,
+                    "Generated disbursement schedule with " + savedSchedules.size() + " stages for application id: " + applicationId);
+        } catch (Exception e) {
+            // Audit log failure must not prevent primary operation success
+        }
 
         return savedSchedules;
     }

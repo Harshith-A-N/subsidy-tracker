@@ -251,6 +251,34 @@ class DisbursementPlanServiceTest {
                 .hasMessageContaining("Trigger milestone is required");
     }
 
+    // ======================== validateStages – due date offset days ========================
+
+    @Test
+    void createPlan_throwsWhenDueDateOffsetDaysIsNull() {
+        DisbursementStage stage = stage("Stage A", 1, new BigDecimal("100"), TriggerMilestone.APPLICATION_APPROVAL);
+        stage.setDueDateOffsetDays(null);
+
+        when(schemeRepository.findById(1L)).thenReturn(Optional.of(scheme));
+        when(planRepository.findBySchemeId(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> planService.createPlan(1L, 10L, List.of(stage)))
+                .isInstanceOf(InvalidOperationException.class)
+                .hasMessageContaining("Due date offset days cannot be null");
+    }
+
+    @Test
+    void createPlan_throwsWhenDueDateOffsetDaysIsNegative() {
+        DisbursementStage stage = stage("Stage A", 1, new BigDecimal("100"), TriggerMilestone.APPLICATION_APPROVAL);
+        stage.setDueDateOffsetDays(-5);
+
+        when(schemeRepository.findById(1L)).thenReturn(Optional.of(scheme));
+        when(planRepository.findBySchemeId(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> planService.createPlan(1L, 10L, List.of(stage)))
+                .isInstanceOf(InvalidOperationException.class)
+                .hasMessageContaining("Due date offset days must be non-negative");
+    }
+
     // ======================== getPlanBySchemeId ========================
 
     @Test
@@ -376,6 +404,7 @@ class DisbursementPlanServiceTest {
         s.setSequenceNumber(seq);
         s.setPercentageOfGrant(pct);
         s.setTriggerMilestone(milestone);
+        s.setDueDateOffsetDays(30);
         return s;
     }
 

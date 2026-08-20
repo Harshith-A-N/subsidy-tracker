@@ -6,10 +6,13 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.subsidytracker.common.entity.Application;
+import com.subsidytracker.common.entity.User;
 import com.subsidytracker.common.enums.ApplicationStatus;
 import com.subsidytracker.common.enums.ComplianceStatus;
 import com.subsidytracker.common.enums.DisbursementScheduleStatus;
@@ -24,7 +27,9 @@ import com.subsidytracker.disbursement.entity.DisbursementStage;
 import com.subsidytracker.disbursement.repository.ApplicationDisbursementScheduleRepository;
 import com.subsidytracker.disbursement.repository.DisbursementMilestoneRepository;
 import com.subsidytracker.eligibility.repository.ApplicationRepository;
+import com.subsidytracker.eligibility.repository.UserRepository;
 import com.subsidytracker.scheme.repository.RegionalBudgetRepository;
+import com.subsidytracker.common.service.AuditLogService;
 
 @Service
 public class ComplianceMilestoneService {
@@ -33,17 +38,23 @@ public class ComplianceMilestoneService {
     private final ApplicationDisbursementScheduleRepository scheduleRepository;
     private final ApplicationRepository applicationRepository;
     private final RegionalBudgetRepository regionalBudgetRepository;
+    private final UserRepository userRepository;
+    private final AuditLogService auditLogService;
 
     public ComplianceMilestoneService(
             DisbursementMilestoneRepository milestoneRepository,
             ApplicationDisbursementScheduleRepository scheduleRepository,
             ApplicationRepository applicationRepository,
-            RegionalBudgetRepository regionalBudgetRepository) {
+            RegionalBudgetRepository regionalBudgetRepository,
+            UserRepository userRepository,
+            AuditLogService auditLogService) {
 
         this.milestoneRepository = milestoneRepository;
         this.scheduleRepository = scheduleRepository;
         this.applicationRepository = applicationRepository;
         this.regionalBudgetRepository = regionalBudgetRepository;
+        this.userRepository = userRepository;
+        this.auditLogService = auditLogService;
     }
 
     /**
@@ -122,11 +133,21 @@ public class ComplianceMilestoneService {
     }
 
     /**
-     * Mark a compliance milestone as completed.
+     * Mark a compliance milestone as completed using authenticated security context.
      * Completing it releases the corresponding disbursement stage.
      */
     @Transactional
     public DisbursementMilestone completeMilestone(Long milestoneId) {
+        Long currentUserId = getCurrentUserIdFromSecurityContext();
+        return completeMilestone(milestoneId, currentUserId);
+    }
+
+    /**
+     * Mark a compliance milestone as completed by a specific user.
+     * Completing it releases the corresponding disbursement stage.
+     */
+    @Transactional
+    public DisbursementMilestone completeMilestone(Long milestoneId, Long completedByUserId) {
 
         DisbursementMilestone milestone =
                 milestoneRepository.findById(milestoneId)
@@ -153,6 +174,12 @@ public class ComplianceMilestoneService {
 
         milestone.setCompletedAt(
                 LocalDateTime.now());
+
+        if (completedByUserId != null) {
+            User completedBy = userRepository.findById(completedByUserId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User", completedByUserId));
+            milestone.setCompletedBy(completedBy);
+        }
 
         /*
          * Release the corresponding disbursement stage.
@@ -208,7 +235,20 @@ public class ComplianceMilestoneService {
         // post-release state without a second query.
         advanceApplicationStatusIfFullyDisbursed(milestone, schedules);
 
-        return milestoneRepository.save(milestone);
+        DisbursementMilestone saved = milestoneRepository.save(milestone);
+
+        try {
+            auditLogService.logEvent(
+                    "DisbursementMilestone",
+                    milestone.getId(),
+                    "MILESTONE_COMPLETED",
+                    milestone.getCompletedBy(),
+                    "Completed milestone " + milestone.getMilestoneType() + " for stage " + milestone.getStage().getStageName());
+        } catch (Exception e) {
+            // Audit log failure must not prevent primary operation success
+        }
+
+        return saved;
     }
 
     /**
@@ -298,6 +338,17 @@ public class ComplianceMilestoneService {
 
             milestoneRepository.save(milestone);
 
+            try {
+                auditLogService.logSystemEvent(
+                        "DisbursementMilestone",
+                        milestone.getId(),
+                        "MILESTONE_OVERDUE",
+                        "Milestone " + milestone.getId() + " for application "
+                                + milestone.getApplication().getId() + " is overdue.");
+            } catch (Exception e) {
+                // Audit log failure must not prevent primary operation success
+            }
+
             System.out.println(
                     "COMPLIANCE REMINDER: Milestone "
                             + milestone.getId()
@@ -327,5 +378,14 @@ public class ComplianceMilestoneService {
 
         throw new IllegalArgumentException(
                 "Unsupported trigger milestone: " + trigger);
+    }
+
+    private Long getCurrentUserIdFromSecurityContext() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+            String email = auth.getName();
+            return userRepository.findByEmail(email).map(User::getId).orElse(null);
+        }
+        return null;
     }
 }
