@@ -15,6 +15,7 @@ import com.subsidytracker.disbursement.entity.DisbursementStage;
 import com.subsidytracker.disbursement.repository.ApplicationDisbursementScheduleRepository;
 import com.subsidytracker.disbursement.repository.DisbursementPlanRepository;
 import com.subsidytracker.disbursement.repository.DisbursementStageRepository;
+import com.subsidytracker.common.service.AuditLogService;
 import com.subsidytracker.eligibility.repository.ApplicationRepository;
 import com.subsidytracker.scheme.repository.SchemeSlabRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,6 +43,7 @@ class ScheduleGenerationServiceTest {
     @Mock private ApplicationDisbursementScheduleRepository scheduleRepository;
     @Mock private ComplianceMilestoneService complianceMilestoneService;
     @Mock private SchemeSlabRepository schemeSlabRepository;
+    @Mock private AuditLogService auditLogService;
 
     @InjectMocks
     private ScheduleGenerationService scheduleGenerationService;

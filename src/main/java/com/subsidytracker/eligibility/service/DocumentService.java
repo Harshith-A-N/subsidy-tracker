@@ -9,6 +9,7 @@ import com.subsidytracker.common.enums.DocumentVerificationStatus;
 import com.subsidytracker.common.enums.Role;
 import com.subsidytracker.common.exception.InvalidOperationException;
 import com.subsidytracker.common.exception.ResourceNotFoundException;
+import com.subsidytracker.common.service.CloudinaryService;
 import com.subsidytracker.eligibility.dto.DocumentResponseDto;
 import com.subsidytracker.eligibility.repository.ApplicationRepository;
 import com.subsidytracker.eligibility.repository.DocumentRepository;
@@ -29,9 +30,6 @@ import java.util.UUID;
 @Service
 public class DocumentService {
 
-    // Folder where uploaded files physically get saved (created if missing)
-    private static final String UPLOAD_DIR = "uploads/documents";
-
     // Statuses that permit document uploads from the owning beneficiary
     private static final Set<ApplicationStatus> UPLOAD_ALLOWED_STATUSES = Set.of(
             ApplicationStatus.DRAFT,
@@ -41,13 +39,16 @@ public class DocumentService {
     private final DocumentRepository documentRepository;
     private final ApplicationRepository applicationRepository;
     private final UserRepository userRepository;
+    private final CloudinaryService cloudinaryService;
 
     public DocumentService(DocumentRepository documentRepository,
                            ApplicationRepository applicationRepository,
-                           UserRepository userRepository) {
+                           UserRepository userRepository,
+                           CloudinaryService cloudinaryService) {
         this.documentRepository = documentRepository;
         this.applicationRepository = applicationRepository;
         this.userRepository = userRepository;
+        this.cloudinaryService = cloudinaryService;
     }
 
     @Transactional
@@ -70,30 +71,17 @@ public class DocumentService {
             throw new InvalidOperationException("Uploaded file is empty.");
         }
 
-        try {
-            Path uploadPath = Paths.get(UPLOAD_DIR);
-            if (!Files.exists(uploadPath)) {
-                Files.createDirectories(uploadPath);
-            }
+        String cloudinaryUrl = cloudinaryService.upload(file);
 
-            // Prefix with a random UUID so two different uploads never overwrite each other
-            String storedFileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
-            Path targetPath = uploadPath.resolve(storedFileName);
-            file.transferTo(targetPath);
+        Document document = new Document();
+        document.setApplication(application);
+        document.setDocumentType(documentType);
+        document.setFilePath(cloudinaryUrl);
+        document.setUploadedAt(LocalDateTime.now());
+        document.setVerificationStatus(DocumentVerificationStatus.PENDING);
 
-            Document document = new Document();
-            document.setApplication(application);
-            document.setDocumentType(documentType);
-            document.setFilePath(targetPath.toString());
-            document.setUploadedAt(LocalDateTime.now());
-            document.setVerificationStatus(DocumentVerificationStatus.PENDING);
-
-            Document saved = documentRepository.save(document);
-            return toDto(saved);
-
-        } catch (IOException e) {
-            throw new InvalidOperationException("Failed to store file: " + e.getMessage());
-        }
+        Document saved = documentRepository.save(document);
+        return toDto(saved);
     }
 
     @Transactional

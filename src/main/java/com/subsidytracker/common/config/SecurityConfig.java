@@ -3,6 +3,7 @@ package com.subsidytracker.common.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
@@ -13,6 +14,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 import com.subsidytracker.security.filter.JwtAuthenticationFilter;
@@ -78,21 +80,25 @@ public class SecurityConfig {
             .sessionManagement(session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
+            .exceptionHandling(exceptions -> exceptions
+                .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
+            )
             .authenticationProvider(authenticationProvider())
             .authorizeHttpRequests(auth -> auth
                 // Public — registration and login
                 .requestMatchers("/api/v1/auth/**").permitAll()
 
-                // Public — static portal page itself. The page's JS calls the
-                // /api/v1/** endpoints below with a Bearer token, so the API
-                // calls are still authenticated even though the page loads
-                // without one.
-                .requestMatchers("/portal/**").permitAll()
+                // Public — static portal page itself and static assets
+                .requestMatchers("/portal/**", "/favicon.ico", "/error").permitAll()
 
-                // Scheme browsing is public — a prospective beneficiary should
-                // be able to see what schemes exist before registering. Only
-                // GET is public; create/update/delete stay ADMIN-only below.
-                // Nothing in SchemeResponseDto is sensitive.
+                // Public — mock external integration endpoints
+                .requestMatchers("/mock/**").permitAll()
+
+                // Treasury integration endpoint — FINANCE_APPROVER and ADMIN only
+                .requestMatchers(HttpMethod.POST, "/api/v1/integrations/treasury/**")
+                    .hasAnyRole("FINANCE_APPROVER", "ADMIN")
+
+                // Scheme browsing is public
                 .requestMatchers(HttpMethod.GET, "/api/v1/schemes/**").permitAll()
 
                 // Scheme management — ADMIN only
@@ -100,53 +106,53 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PUT, "/api/v1/schemes/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/schemes/**").hasRole("ADMIN")
 
-                // Disbursement plan configuration — ADMIN only. Previously
-                // unrestricted (fell under the generic authenticated() rule
-                // below), so any logged-in user could create/edit/delete a
-                // scheme's disbursement plan.
+                // Scheme slab and regional budget configuration — ADMIN only
+                .requestMatchers(HttpMethod.POST, "/api/v1/schemes/*/slabs").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/v1/schemes/*/regional-budgets").hasRole("ADMIN")
+
+                // Beneficiary self-service endpoints
+                .requestMatchers(HttpMethod.POST, "/api/v1/beneficiaries").hasRole("BENEFICIARY")
+                .requestMatchers(HttpMethod.GET, "/api/v1/beneficiaries/me").hasRole("BENEFICIARY")
+                .requestMatchers(HttpMethod.PUT, "/api/v1/beneficiaries/*").hasRole("BENEFICIARY")
+                .requestMatchers(HttpMethod.POST, "/api/v1/applications").hasRole("BENEFICIARY")
+                .requestMatchers(HttpMethod.GET, "/api/v1/applications/my-applications").hasRole("BENEFICIARY")
+                .requestMatchers(HttpMethod.POST, "/api/v1/applications/*/submit").hasRole("BENEFICIARY")
+                .requestMatchers(HttpMethod.POST, "/api/v1/applications/*/documents").hasRole("BENEFICIARY")
+
+                // Officer/Admin oversight application status listing
+                .requestMatchers(HttpMethod.GET, "/api/v1/applications/status/*")
+                    .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER", "ADMIN")
+
+                // Disbursement plan configuration — ADMIN only
                 .requestMatchers(HttpMethod.POST, "/api/disbursement/plans/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/disbursement/plans/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/disbursement/plans/**").hasRole("ADMIN")
 
-                // Compliance milestone actions (create, complete/release funds) —
-                // officers and admin only. Previously unrestricted, so a
-                // Beneficiary could call PUT /complete directly and release
-                // their own funds without any officer sign-off.
-                .requestMatchers(HttpMethod.POST, "/api/disbursement/compliance/**")
-                    .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER", "ADMIN")
-                .requestMatchers(HttpMethod.PUT, "/api/disbursement/compliance/**")
+                // Compliance milestone creation (ADMIN) and completion (field/district officers & finance fund release)
+                .requestMatchers(HttpMethod.POST, "/api/disbursement/compliance/application/*")
+                    .hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/disbursement/compliance/*/complete")
                     .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER", "ADMIN")
 
-                // Compliance milestone listings: pending/overdue are system-wide
-                // views across all beneficiaries — officers and admin only.
-                .requestMatchers(HttpMethod.GET, "/api/disbursement/compliance/pending").
-                    hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER", "ADMIN")
+                // Compliance milestone listings: pending/overdue
+                .requestMatchers(HttpMethod.GET, "/api/disbursement/compliance/pending")
+                    .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER", "ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/disbursement/compliance/overdue")
                     .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER", "ADMIN")
 
-                // Per-application milestone reads: open to any authenticated role.
-                // BENEFICIARY is allowed through here because
-                // ComplianceMilestoneController.assertCanViewApplication enforces
-                // that a beneficiary can only see their own application's data.
+                // Per-application milestone reads
                 .requestMatchers(HttpMethod.GET, "/api/disbursement/compliance/application/**")
                     .authenticated()
 
-                // Disbursement schedule generation is an administrative/finance
-                // action (triggers the actual fund-release plan for an
-                // application) — not something a Beneficiary should invoke.
+                // Disbursement schedule generation
                 .requestMatchers(HttpMethod.POST, "/api/disbursement/schedules/**")
                     .hasAnyRole("FINANCE_APPROVER", "ADMIN")
 
-                // Per-application schedule reads: open to any authenticated role.
-                // BENEFICIARY is allowed through here because
-                // DisbursementController.assertCanViewApplication enforces that
-                // a beneficiary can only see their own application's schedule.
+                // Per-application schedule reads
                 .requestMatchers(HttpMethod.GET, "/api/disbursement/schedules/**")
                     .authenticated()
 
-                // Analytics and downloadable reports expose scheme/region-wide
-                // budget and compliance data — restricted to roles with oversight
-                // responsibility, matching the project guide's roles table.
+                // Analytics and downloadable reports
                 .requestMatchers(HttpMethod.GET, "/api/v1/analytics/**")
                     .hasAnyRole("DISTRICT_OFFICER", "FINANCE_APPROVER", "ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/reports/**")
@@ -154,6 +160,8 @@ public class SecurityConfig {
 
                 // Verification actions — officers only
                 .requestMatchers(HttpMethod.PATCH, "/api/v1/applications/*/verify")
+                    .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER")
+                .requestMatchers(HttpMethod.PATCH, "/api/v1/applications/*/resume-verification")
                     .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER")
 
                 // Document verification — officers only
@@ -165,8 +173,6 @@ public class SecurityConfig {
                     .hasRole("ADMIN")
 
                 // User listing (Admin "All Users" page) — ADMIN only.
-                // Note: this exact-path matcher does NOT catch /api/v1/users/me,
-                // which any authenticated user can hit via the catch-all below.
                 .requestMatchers(HttpMethod.GET, "/api/v1/users")
                     .hasRole("ADMIN")
 
@@ -174,7 +180,7 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-            .httpBasic(Customizer.withDefaults());
+            .httpBasic(httpBasic -> httpBasic.disable());
 
         return http.build();
     }

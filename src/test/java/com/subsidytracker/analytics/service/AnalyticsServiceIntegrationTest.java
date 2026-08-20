@@ -192,6 +192,7 @@ public class AnalyticsServiceIntegrationTest {
         stage1.setSequenceNumber(1);
         stage1.setPercentageOfGrant(new BigDecimal("50.00"));
         stage1.setTriggerMilestone(TriggerMilestone.APPLICATION_APPROVAL);
+        stage1.setDueDateOffsetDays(30);
         entityManager.persist(stage1);
 
         // 8. Disbursement schedules

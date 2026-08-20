@@ -8,6 +8,7 @@ import com.subsidytracker.common.enums.ApplicationStatus;
 import com.subsidytracker.common.enums.Role;
 import com.subsidytracker.common.exception.InvalidOperationException;
 import com.subsidytracker.common.exception.ResourceNotFoundException;
+import com.subsidytracker.common.service.AuditLogService;
 import com.subsidytracker.eligibility.dto.ApplicationRequestDto;
 import com.subsidytracker.eligibility.dto.ApplicationResponseDto;
 import com.subsidytracker.eligibility.repository.ApplicationRepository;
@@ -28,17 +29,20 @@ public class ApplicationService {
     private final SchemeRepository schemeRepository;
     private final UserRepository userRepository;
     private final EligibilityService eligibilityService;
+    private final AuditLogService auditLogService;
 
     public ApplicationService(ApplicationRepository applicationRepository,
                               BeneficiaryRepository beneficiaryRepository,
                               SchemeRepository schemeRepository,
                               UserRepository userRepository,
-                              EligibilityService eligibilityService) {
+                              EligibilityService eligibilityService,
+                              AuditLogService auditLogService) {
         this.applicationRepository = applicationRepository;
         this.beneficiaryRepository = beneficiaryRepository;
         this.schemeRepository = schemeRepository;
         this.userRepository = userRepository;
         this.eligibilityService = eligibilityService;
+        this.auditLogService = auditLogService;
     }
 
     /**
@@ -114,7 +118,21 @@ public class ApplicationService {
         }
 
         // Trigger eligibility calculation — evaluates income, category, region
-        return eligibilityService.calculateEligibilityForApplication(application);
+        ApplicationResponseDto response = eligibilityService.calculateEligibilityForApplication(application);
+
+        try {
+            User submittingUser = userRepository.findById(currentUserId).orElse(null);
+            auditLogService.logEvent(
+                    "Application",
+                    application.getId(),
+                    "SUBMITTED",
+                    submittingUser,
+                    "Application submitted for eligibility evaluation. New status: " + response.getStatus());
+        } catch (Exception e) {
+            // Audit log failure must not prevent primary operation success
+        }
+
+        return response;
     }
 
     /**

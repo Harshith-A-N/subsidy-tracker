@@ -18,6 +18,7 @@ import com.subsidytracker.common.enums.VerificationDecision;
 import com.subsidytracker.common.enums.VerificationLevel;
 import com.subsidytracker.common.exception.InvalidOperationException;
 import com.subsidytracker.common.exception.ResourceNotFoundException;
+import com.subsidytracker.common.service.AuditLogService;
 import com.subsidytracker.disbursement.service.ScheduleGenerationService;
 import com.subsidytracker.eligibility.dto.VerificationRequestDto;
 import com.subsidytracker.eligibility.dto.VerificationResponseDto;
@@ -41,19 +42,22 @@ public class VerificationService {
     private final UserRepository userRepository;
     private final SchemeSlabRepository schemeSlabRepository;
     private final ScheduleGenerationService scheduleGenerationService;
+    private final AuditLogService auditLogService;
 
     public VerificationService(
             ApplicationRepository applicationRepository,
             VerificationRepository verificationRepository,
             UserRepository userRepository,
             SchemeSlabRepository schemeSlabRepository,
-            ScheduleGenerationService scheduleGenerationService) {
+            ScheduleGenerationService scheduleGenerationService,
+            AuditLogService auditLogService) {
 
         this.applicationRepository = applicationRepository;
         this.verificationRepository = verificationRepository;
         this.userRepository = userRepository;
         this.schemeSlabRepository = schemeSlabRepository;
         this.scheduleGenerationService = scheduleGenerationService;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -115,6 +119,17 @@ public class VerificationService {
         // instead of leaving the application silently stuck.
         if (newStatus == ApplicationStatus.READY_FOR_DISBURSEMENT) {
             scheduleGenerationService.generateSchedule(application.getId());
+        }
+
+        try {
+            auditLogService.logEvent(
+                    "Application",
+                    application.getId(),
+                    request.getDecision().name(),
+                    officer,
+                    "Verification decision " + request.getDecision() + " at " + level + " level. New status: " + newStatus);
+        } catch (Exception e) {
+            // Audit log failure must not prevent primary operation success
         }
 
         VerificationResponseDto response =
@@ -190,6 +205,17 @@ public class VerificationService {
 
         application.setStatus(resumeStatus);
         applicationRepository.save(application);
+
+        try {
+            auditLogService.logEvent(
+                    "Application",
+                    application.getId(),
+                    "RESUMED_VERIFICATION",
+                    (User) null,
+                    "Application resumed at " + lastAction.getLevel() + " level after re-verification. New status: " + resumeStatus);
+        } catch (Exception e) {
+            // Audit log failure must not prevent primary operation success
+        }
 
         VerificationResponseDto response =
                 new VerificationResponseDto();

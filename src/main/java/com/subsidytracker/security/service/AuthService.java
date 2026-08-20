@@ -54,7 +54,7 @@ public class AuthService {
 
         User saved = userRepository.save(user);
 
-        String token = jwtService.generateToken(saved.getEmail());
+        String token = jwtService.generateToken(saved.getEmail(), saved.getRole().name());
 
         return new AuthResponseDto(
                 saved.getId(),
@@ -85,7 +85,7 @@ public class AuthService {
                 .orElseThrow(() -> new InvalidOperationException(
                         "User not found after successful authentication."));
 
-        String token = jwtService.generateToken(user.getEmail());
+        String token = jwtService.generateToken(user.getEmail(), user.getRole().name());
 
         return new AuthResponseDto(
                 user.getId(),

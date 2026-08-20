@@ -23,6 +23,7 @@ import com.subsidytracker.common.entity.Application;
 import com.subsidytracker.common.entity.Beneficiary;
 import com.subsidytracker.common.entity.RegionalBudget;
 import com.subsidytracker.common.entity.Scheme;
+import com.subsidytracker.common.entity.User;
 import com.subsidytracker.common.enums.ApplicationStatus;
 import com.subsidytracker.common.enums.ComplianceStatus;
 import com.subsidytracker.common.enums.DisbursementScheduleStatus;
@@ -35,7 +36,9 @@ import com.subsidytracker.disbursement.entity.DisbursementMilestone;
 import com.subsidytracker.disbursement.entity.DisbursementStage;
 import com.subsidytracker.disbursement.repository.ApplicationDisbursementScheduleRepository;
 import com.subsidytracker.disbursement.repository.DisbursementMilestoneRepository;
+import com.subsidytracker.common.service.AuditLogService;
 import com.subsidytracker.eligibility.repository.ApplicationRepository;
+import com.subsidytracker.eligibility.repository.UserRepository;
 import com.subsidytracker.scheme.repository.RegionalBudgetRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -45,6 +48,8 @@ class ComplianceMilestoneServiceTest {
     @Mock private ApplicationDisbursementScheduleRepository scheduleRepository;
     @Mock private ApplicationRepository applicationRepository;
     @Mock private RegionalBudgetRepository regionalBudgetRepository;
+    @Mock private UserRepository userRepository;
+    @Mock private AuditLogService auditLogService;
 
     @InjectMocks
     private ComplianceMilestoneService complianceMilestoneService;
@@ -187,6 +192,35 @@ class ComplianceMilestoneServiceTest {
         assertThat(result.getCompletedAt()).isNotNull();
         assertThat(matchingSchedule.getStatus()).isEqualTo(DisbursementScheduleStatus.RELEASED);
         verify(scheduleRepository).save(matchingSchedule);
+    }
+
+    @Test
+    void completeMilestone_setsCompletedByActor() {
+        DisbursementStage stage = stage("Ground Verification", 1, TriggerMilestone.GROUND_VERIFICATION);
+        stage.setId(50L);
+
+        DisbursementMilestone milestone = milestone(stage, new BigDecimal("3000"), ComplianceStatus.PENDING);
+        milestone.setApplication(application);
+
+        ApplicationDisbursementSchedule matchingSchedule =
+                schedule(stage, new BigDecimal("3000"), LocalDate.now(), DisbursementScheduleStatus.PENDING);
+        matchingSchedule.setApplication(application);
+
+        User officer = new User();
+        officer.setId(10L);
+        officer.setEmail("officer@test.com");
+
+        when(milestoneRepository.findById(1L)).thenReturn(Optional.of(milestone));
+        when(userRepository.findById(10L)).thenReturn(Optional.of(officer));
+        when(scheduleRepository.findByApplicationId(100L)).thenReturn(List.of(matchingSchedule));
+        when(regionalBudgetRepository.findBySchemeId(1L)).thenReturn(List.of());
+        when(milestoneRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        DisbursementMilestone result = complianceMilestoneService.completeMilestone(1L, 10L);
+
+        assertThat(result.getComplianceStatus()).isEqualTo(ComplianceStatus.COMPLETED);
+        assertThat(result.getCompletedBy()).isEqualTo(officer);
+        assertThat(result.getCompletedAt()).isNotNull();
     }
 
     @Test
