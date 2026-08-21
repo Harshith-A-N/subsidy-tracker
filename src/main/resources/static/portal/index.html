@@ -1640,7 +1640,10 @@
            paths work as-is. If you ever run this frontend from a different
            origin/port, change API_BASE to e.g. 'http://localhost:8080'.
         ================================================================ */
-        const API_BASE = '';
+        let API_BASE = window.API_BASE_URL || localStorage.getItem('API_BASE_URL') || '';
+        if (!API_BASE && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+            API_BASE = 'https://subsidy-tracker-backend.onrender.com';
+        }
         const TOKEN_KEY = 'govgrant_token';
 
         function getToken() { return sessionStorage.getItem(TOKEN_KEY); }
@@ -1839,8 +1842,9 @@
 
         async function login(email, password) {
             const r = await apiFetch('/api/v1/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
-            if (!r.success) return { success: false, error: r.error };
+            if (!r.success || !r.data) return { success: false, error: r.error || 'Login failed. Please verify backend server is running.' };
             const d = r.data;
+            if (!d || !d.token) return { success: false, error: 'Invalid response format from server.' };
             setToken(d.token);
             const user = { id: d.userId, name: d.fullName, email: d.email, role: normalizeRole(d.role), avatar: (d.fullName || '?').charAt(0).toUpperCase() };
             setCurrentUser(user);
@@ -1848,17 +1852,14 @@
         }
 
         async function register(data) {
-            // Backend only supports self-registration for beneficiaries — see
-            // AuthService.registerBeneficiary(). Officer/admin accounts are seeded
-            // directly in the database (see seed-officer-accounts.sql) until an
-            // admin-facing "create user" endpoint exists.
             const r = await apiFetch('/api/v1/auth/register', {
                 method: 'POST', body: JSON.stringify({
                     fullName: data.name, email: data.email, password: data.password
                 })
             });
-            if (!r.success) return { success: false, error: r.error };
+            if (!r.success || !r.data) return { success: false, error: r.error || 'Registration failed. Please verify backend server is running.' };
             const d = r.data;
+            if (!d || !d.token) return { success: false, error: 'Invalid response format from server.' };
             setToken(d.token);
             const user = { id: d.userId, name: d.fullName, email: d.email, role: normalizeRole(d.role), avatar: (d.fullName || '?').charAt(0).toUpperCase() };
             setCurrentUser(user);
