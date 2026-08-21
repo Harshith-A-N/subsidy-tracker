@@ -3032,7 +3032,7 @@
             sub = sub || 'queue';
             const user = requireAuth(['field_officer']); if (!user) return;
             container.innerHTML = navbar(user) + '<div class="sidebar-layout">' +
-                sidebar([{ label: 'Field Operations', items: [{ key: 'queue', icon: '📋', label: 'Verification Queue' }, { key: 'verified', icon: '✅', label: 'Completed' }, { key: 'profile', icon: '👤', label: 'My Profile' }] }], sub) +
+                sidebar([{ label: 'Field Operations', items: [{ key: 'queue', icon: '📋', label: 'Verification Queue' }, { key: 'compliance', icon: '🔍', label: 'Stage Compliance' }, { key: 'verified', icon: '✅', label: 'Completed' }, { key: 'profile', icon: '👤', label: 'My Profile' }] }], sub) +
                 '<main class="main-content fade-in" id="fo-main"><div class="empty-state"><span class="loading-spinner"></span></div></main></div>';
             const m = document.getElementById('fo-main');
 
@@ -3041,6 +3041,7 @@
             const officer = meRes.data;
 
             if (sub === 'queue') foQueue(m, user, officer);
+            else if (sub === 'compliance') officerCompliance(m, user, officer, 'field_officer');
             else if (sub === 'verified') foVerified(m, user, officer);
             else if (sub === 'profile') foProfile(m, user, officer);
         }
@@ -3063,6 +3064,78 @@
             if (!res.success) { showToast(res.error, 'error'); return; }
             showToast(`Application #${appId} verification resumed.`, 'success');
             navigate('field_officer', 'queue');
+        }
+
+        /* ================================================================
+           Stage Compliance — shared by Field & District Officers.
+           Lists applications in the disbursement lifecycle, shows uploaded
+           utilization proofs, and lets the officer verify+complete a
+           PROOF_SUBMITTED milestone so Finance can release the next stage.
+        ================================================================ */
+        async function officerCompliance(m, user, officer, roleKey) {
+            m.innerHTML = '<div class="empty-state"><span class="loading-spinner"></span></div>';
+            const [r1, r2] = await Promise.all([
+                foLoadRegionalApps('READY_FOR_DISBURSEMENT', officer),
+                foLoadRegionalApps('DISBURSED', officer)
+            ]);
+            const apps = [...(r1.success ? r1.data : []), ...(r2.success ? r2.data : [])];
+            m.innerHTML = `
+  <div class="dash-header">
+    <div><h2>Stage Compliance 🔍</h2><p>Verify utilization proofs and complete disbursement milestones · ${officer.region || 'All Regions'}</p></div>
+    <div class="text-sm text-muted" style="text-align:right"><div style="font-size:22px;font-weight:800;color:var(--primary-light)">${apps.length}</div><div>In Disbursement</div></div>
+  </div>
+  ${apps.length === 0 ? '<div class="card"><div class="empty-state"><div class="e-icon">📭</div><h3>No applications in disbursement</h3><p>Applications appear here once Finance releases their first stage.</p></div></div>' : '<div id="oc-cards" style="display:flex;flex-direction:column;gap:16px"></div>'}`;
+            if (apps.length === 0) return;
+            const wrap = document.getElementById('oc-cards');
+            apps.forEach(app => {
+                const card = document.createElement('div'); card.className = 'card';
+                card.innerHTML = '<div class="empty-state"><span class="loading-spinner"></span></div>';
+                wrap.appendChild(card);
+                officerRenderComplianceCard(card, app, roleKey);
+            });
+        }
+
+        async function officerRenderComplianceCard(card, app, roleKey) {
+            const [schedRes, msRes, docsRes] = await Promise.all([
+                apiFetch(`/api/disbursement/schedules/application/${app.id}`),
+                apiFetch(`/api/disbursement/compliance/application/${app.id}`),
+                apiFetch(`/api/v1/applications/${app.id}/documents`)
+            ]);
+            if (!schedRes.success) { card.innerHTML = `<div class="alert alert-danger">⚠️ ${schedRes.error}</div>`; return; }
+            const schedule = schedRes.data;
+            const milestones = msRes.success ? msRes.data : [];
+            const docs = docsRes.success ? docsRes.data : [];
+            const byStage = {};
+            milestones.forEach(ms => { if (ms.stage) byStage[ms.stage.id] = ms; });
+            const sorted = [...schedule].sort((a, b) => (a.stageSequenceNumber || 0) - (b.stageSequenceNumber || 0));
+            const proofsHtml = docs.length ? docs.map(d => `<button class="btn btn-outline btn-sm" onclick="viewDocumentFile(${app.id},${d.id})">👁 ${d.documentType}</button>`).join(' ') : '<span class="text-xs text-muted">No proof uploaded yet.</span>';
+            const rows = sorted.map(entry => {
+                const ms = byStage[entry.stageId];
+                let action = '—';
+                if (ms && entry.status === 'RELEASED' && ms.complianceStatus === 'PROOF_SUBMITTED') {
+                    action = `<button class="btn btn-success btn-sm" onclick="officerCompleteMilestone(${ms.id}, ${app.id}, '${roleKey}')">✅ Verify & Complete</button>`;
+                } else if (ms && ms.complianceStatus === 'COMPLETED') {
+                    action = `<span class="text-xs" style="color:var(--success)">✓ Verified</span>`;
+                } else if (entry.status === 'RELEASED') {
+                    action = `<span class="text-xs text-muted">⏳ Awaiting beneficiary proof</span>`;
+                } else {
+                    action = `<span class="text-xs text-muted">🔒 Not released</span>`;
+                }
+                return `<tr><td><strong>${entry.stageName}</strong></td><td>${ms ? complianceStatusBadge(ms.complianceStatus) : '—'}</td><td>${scheduleStatusBadge(entry.status)}</td><td>${action}</td></tr>`;
+            }).join('');
+            card.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+      <div><div style="font-size:16px;font-weight:800">${app.beneficiaryName || app.beneficiary?.fullName || ('#' + app.id)}</div><div class="text-sm text-muted">#${app.id} · ${app.schemeName || ''}</div></div>
+    </div>
+    <div style="margin-bottom:12px"><div class="text-xs text-muted" style="margin-bottom:6px;font-weight:700;text-transform:uppercase">Uploaded Utilization Proofs</div>${proofsHtml}</div>
+    <div class="table-wrap"><table><thead><tr><th>Stage</th><th>Compliance</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+        }
+
+        async function officerCompleteMilestone(milestoneId, appId, roleKey) {
+            const r = await apiFetch(`/api/disbursement/compliance/${milestoneId}/complete`, { method: 'PUT' });
+            if (!r.success) { showToast(r.error, 'error'); return; }
+            showToast('Milestone verified & completed. Finance can now release the next stage.', 'success');
+            navigate(roleKey, 'compliance');
         }
 
         async function foQueue(m, user, officer) {
@@ -3264,6 +3337,7 @@
             const officer = meRes.data;
 
             if (sub === 'review') doReview(m, user, officer);
+            else if (sub === 'compliance') officerCompliance(m, user, officer, 'district_officer');
             else if (sub === 'decided') doDecided(m, user, officer);
             else if (sub === 'profile') doProfile(m, user, officer);
         }

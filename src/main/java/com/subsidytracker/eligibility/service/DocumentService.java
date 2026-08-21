@@ -165,7 +165,12 @@ public class DocumentService {
 
         checkDocumentAccess(application, currentUserId);
 
-        return documentRepository.findByApplicationId(applicationId).stream().map(this::toDto).toList();
+        boolean stageOnly = restrictToStageDocuments(application, currentUserId);
+
+        return documentRepository.findByApplicationId(applicationId).stream()
+                .filter(d -> !stageOnly || d.getStage() != null)
+                .map(this::toDto)
+                .toList();
     }
 
     /**
@@ -184,6 +189,12 @@ public class DocumentService {
 
         if (!document.getApplication().getId().equals(applicationId)) {
             throw new ResourceNotFoundException("Document", documentId);
+        }
+
+        // During the disbursement lifecycle, officers may only open stage-linked
+        // proofs — never KYC documents (stage == null). See restrictToStageDocuments.
+        if (restrictToStageDocuments(application, currentUserId) && document.getStage() == null) {
+            throw new InvalidOperationException("You are not authorized to view this document.");
         }
 
         return document;
@@ -212,12 +223,18 @@ public class DocumentService {
                 validateBeneficiaryOwnership(application, currentUserId);
                 break;
             case FIELD_OFFICER:
+                // Verification stage (KYC) OR disbursement lifecycle (stage proofs only —
+                // enforced by restrictToStageDocuments in the calling methods).
                 validateOfficerDocumentAccess(application, currentUser,
-                        Set.of(ApplicationStatus.FIELD_VERIFICATION_PENDING));
+                        Set.of(ApplicationStatus.FIELD_VERIFICATION_PENDING,
+                                ApplicationStatus.READY_FOR_DISBURSEMENT,
+                                ApplicationStatus.DISBURSED));
                 break;
             case DISTRICT_OFFICER:
                 validateOfficerDocumentAccess(application, currentUser,
-                        Set.of(ApplicationStatus.DISTRICT_REVIEW_PENDING));
+                        Set.of(ApplicationStatus.DISTRICT_REVIEW_PENDING,
+                                ApplicationStatus.READY_FOR_DISBURSEMENT,
+                                ApplicationStatus.DISBURSED));
                 break;
             case FINANCE_APPROVER:
                 if (application.getStatus() != ApplicationStatus.FINANCE_REVIEW_PENDING) {
@@ -228,6 +245,27 @@ public class DocumentService {
             default:
                 throw new InvalidOperationException("Your role does not have access to application documents.");
         }
+    }
+
+    /**
+     * During the disbursement lifecycle (READY_FOR_DISBURSEMENT / DISBURSED),
+     * field and district officers are permitted (by checkDocumentAccess) to reach
+     * an application's documents so they can verify utilization proofs — but they
+     * must NOT see KYC documents (stage == null) at that point. This returns true
+     * when the caller is an officer viewing an application in the disbursement
+     * phase, signalling the read methods to expose stage-linked documents only.
+     * KYC access during the officer's own verification stage is unaffected.
+     */
+    private boolean restrictToStageDocuments(Application application, long currentUserId) {
+        User currentUser = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", currentUserId));
+        Role role = currentUser.getRole();
+        if (role != Role.FIELD_OFFICER && role != Role.DISTRICT_OFFICER) {
+            return false;
+        }
+        ApplicationStatus status = application.getStatus();
+        return status == ApplicationStatus.READY_FOR_DISBURSEMENT
+                || status == ApplicationStatus.DISBURSED;
     }
 
     /**
