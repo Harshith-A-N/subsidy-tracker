@@ -1,0 +1,16 @@
+{
+  "hosting": {
+    "public": "src/main/resources/static/portal",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

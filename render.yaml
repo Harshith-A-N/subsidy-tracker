@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: subsidy-tracker-backend
+    env: java
+    buildCommand: ./mvnw clean package -DskipTests
+    startCommand: java -jar target/subsidy-tracker-0.0.1-SNAPSHOT.jar
+    envVars:
+      - key: JAVA_VERSION
+        value: 17
+      - key: PORT
+        value: 8080
