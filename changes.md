@@ -1,4 +1,4 @@
-# Changelog: Subsidy-Tracker Infosys Workflow Alignment
+# Changelog: Development of Digital Subsidy and Grant Administration Platform
 
 This document tracks the completed implementation phases for aligning the existing `subsidy-tracker` codebase with the Infosys workflow.
 
