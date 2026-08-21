@@ -1,4 +1,4 @@
-# Government Subsidy/Grant Disbursement Tracking System
+# Development of Digital Subsidy and Grant Administration Platform
 
 A Java/Spring Boot application to streamline the government subsidy and grant disbursement lifecycle — from beneficiary application through eligibility scoring, multi-level verification, staged disbursement, and fund utilization analytics.
 
