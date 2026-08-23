@@ -2627,16 +2627,36 @@
             navigate('beneficiary', 'overview');
         }
 
-        function benOverview(m, user, beneficiary, myApps) {
+        async function benOverview(m, user, beneficiary, myApps) {
+            m.innerHTML = loadingBlock();
             const approved = myApps.filter(a => appStatusInfo(a.status).stage === 5);
             const rejected = myApps.filter(a => appStatusInfo(a.status).rejected);
             const inProgress = myApps.filter(a => !appStatusInfo(a.status).rejected && appStatusInfo(a.status).stage < 5 && a.status !== 'DRAFT');
             const drafts = myApps.filter(a => a.status === 'DRAFT');
+
+            // In-app compliance reminder: check each in-progress/approved application for
+            // overdue milestones so the beneficiary sees it the moment they land on the
+            // dashboard, rather than only if they happen to open Milestones & Funds.
+            let overdueBanner = '';
+            const checkApps = myApps.filter(a => a.status !== 'DRAFT' && !appStatusInfo(a.status).rejected);
+            if (checkApps.length) {
+                const results = await Promise.all(checkApps.map(a => apiFetch(`/api/disbursement/compliance/application/${a.id}`)));
+                const overdueByApp = checkApps.map((a, idx) => ({
+                    app: a,
+                    overdue: results[idx].success ? (results[idx].data || []).filter(ms => ms.complianceStatus === 'OVERDUE') : []
+                })).filter(x => x.overdue.length);
+                if (overdueByApp.length) {
+                    const total = overdueByApp.reduce((n, x) => n + x.overdue.length, 0);
+                    overdueBanner = `<div class="alert alert-danger" style="margin-bottom:18px"><span class="alert-icon">⚠️</span><div style="font-size:12px"><strong>${total} compliance milestone${total === 1 ? '' : 's'} overdue</strong> — ${overdueByApp.map(x => `${x.app.schemeName} (#${x.app.id})`).join(', ')}. Upload the required proof under Milestones & Funds as soon as possible to avoid delaying your next disbursement.</div></div>`;
+                }
+            }
+
             m.innerHTML = `
   <div class="dash-header">
     <div><h2>Welcome, ${(beneficiary.fullName || user.name).split(' ')[0]}! 👋</h2><p>Track your subsidy applications and disbursements in real-time</p></div>
     <button class="btn btn-primary btn-lg" onclick="navigate('beneficiary','apply')">+ Apply for Scheme</button>
   </div>
+  ${overdueBanner}
   <div class="grid-4" style="margin-bottom:26px">
     <div class="stat-card primary"><div class="stat-icon primary">📝</div><div class="stat-label">Total Applied</div><div class="stat-value">${myApps.length}</div></div>
     <div class="stat-card success"><div class="stat-icon success">✅</div><div class="stat-label">Approved</div><div class="stat-value">${approved.length}</div></div>
@@ -3803,7 +3823,7 @@
                 sidebar([
                     { label: 'Overview', items: [{ key: 'overview', icon: '📊', label: 'Dashboard' }, { key: 'analytics', icon: '📈', label: 'Regional Analytics' }] },
                     { label: 'Management', items: [{ key: 'officer-requests', icon: '👤', label: 'Officer Requests', count: reqCount }, { key: 'applications', icon: '📂', label: 'All Applications' }, { key: 'schemes', icon: '📋', label: 'Schemes', count: schemeCount }, { key: 'users', icon: '👥', label: 'All Users', count: userCount }] },
-                    { label: 'Compliance', items: [{ key: 'decisions', icon: '📝', label: 'Recent Decisions' }, { key: 'reports', icon: '📑', label: 'Reports' }] }
+                    { label: 'Compliance', items: [{ key: 'overdue', icon: '⚠️', label: 'Overdue Milestones' }, { key: 'decisions', icon: '📝', label: 'Recent Decisions' }, { key: 'reports', icon: '📑', label: 'Reports' }] }
                 ], sub) +
                 '<main class="main-content fade-in" id="ad-main"></main></div>';
             const m = document.getElementById('ad-main');
@@ -3815,6 +3835,33 @@
             else if (sub === 'users') adUsers(m);
             else if (sub === 'decisions') adDecisions(m);
             else if (sub === 'reports') adReports(m);
+            else if (sub === 'overdue') adOverdueMilestones(m);
+        }
+
+        /**
+         * Surfaces GET /api/disbursement/compliance/overdue — previously computed
+         * daily by ComplianceMilestoneService.flagOverdueMilestones() but never
+         * displayed anywhere; the only trace was a server console log line, so
+         * admins had no way to see which beneficiaries were falling behind on
+         * compliance without querying the DB directly.
+         */
+        async function adOverdueMilestones(m) {
+            m.innerHTML = loadingBlock();
+            const res = await apiFetch('/api/disbursement/compliance/overdue');
+            if (!res.success) { m.innerHTML = errorBlock(res.error); return; }
+            const overdue = res.data || [];
+            m.innerHTML = `<div class="page-header"><h1>Overdue Milestones ⚠️</h1><p>Compliance milestones past their due date, flagged automatically by the nightly job</p></div>
+  <div class="alert alert-${overdue.length ? 'warning' : 'info'}" style="margin-bottom:18px"><span class="alert-icon">${overdue.length ? '⚠️' : 'ℹ️'}</span><div style="font-size:12px">${overdue.length ? `${overdue.length} milestone${overdue.length === 1 ? '' : 's'} ${overdue.length === 1 ? 'is' : 'are'} overdue. Contact the assigned field/district officer to follow up.` : 'No overdue milestones right now — everything is on schedule.'}</div></div>
+  ${!overdue.length ? `<div class="card"><div class="empty-state"><div class="e-icon">✅</div><h3>All caught up</h3></div></div>` : `
+  <div class="table-wrap"><table><thead><tr><th>App ID</th><th>Beneficiary</th><th>Stage</th><th>Type</th><th>Scheduled Amount</th><th>Due Date</th><th>Days Overdue</th></tr></thead><tbody>
+  ${overdue.map(ms => {
+      const app = ms.application || {};
+      const beneficiaryName = (app.beneficiary && app.beneficiary.fullName) || '—';
+      const region = (app.beneficiary && app.beneficiary.region) || '—';
+      const daysOverdue = ms.dueDate ? Math.max(0, Math.floor((Date.now() - new Date(ms.dueDate + 'T00:00:00').getTime()) / 86400000)) : '—';
+      return `<tr><td><code style="font-size:11px">#${app.id ?? '—'}</code></td><td><strong>${beneficiaryName}</strong><div class="text-xs text-dim">${region}</div></td><td class="text-sm text-muted">${ms.stage ? ms.stage.stageName : '—'}</td><td class="text-sm text-muted">${ms.milestoneType || '—'}</td><td>${fmtINRFull(Number(ms.scheduledAmount) || 0)}</td><td class="text-sm text-muted">${ms.dueDate || '—'}</td><td><span class="badge badge-danger">${daysOverdue} day${daysOverdue === 1 ? '' : 's'}</span></td></tr>`;
+  }).join('')}
+  </tbody></table></div>`}`;
         }
 
         async function adOfficerRequests(m, admin) {
@@ -4107,9 +4154,19 @@
         }
         function adAppTable(apps) {
             if (!apps.length) return `<div class="card"><div class="empty-state"><div class="e-icon">📭</div><h3>No applications found</h3></div></div>`;
-            return `<div class="table-wrap"><table><thead><tr><th>App ID</th><th>Beneficiary</th><th>Scheme</th><th>Score</th><th>Status</th><th>Submitted</th></tr></thead><tbody>` +
-                apps.map(a => `<tr><td><code style="font-size:11px">#${a.id}</code></td><td><strong>${a.beneficiaryName}</strong></td><td class="text-sm text-muted">${a.schemeName}</td><td><span style="font-weight:800;color:${scoreColor(a.eligibilityScore)}">${a.eligibilityScore || '—'}</span></td><td>${appStatusBadge(a.status)}</td><td class="text-sm text-muted">${a.submissionDate || '—'}</td></tr>`).join('') +
+            return `<div class="table-wrap"><table><thead><tr><th>App ID</th><th>Beneficiary</th><th>Scheme</th><th>Score</th><th>Status</th><th>Submitted</th><th>Action</th></tr></thead><tbody>` +
+                apps.map(a => `<tr><td><code style="font-size:11px">#${a.id}</code></td><td><strong>${a.beneficiaryName}</strong></td><td class="text-sm text-muted">${a.schemeName}</td><td><span style="font-weight:800;color:${scoreColor(a.eligibilityScore)}">${a.eligibilityScore || '—'}</span></td><td>${appStatusBadge(a.status)}</td><td class="text-sm text-muted">${a.submissionDate || '—'}</td><td>${a.status === 'MANUAL_REVIEW_REQUIRED' ? `<button class="btn btn-outline btn-sm" id="recalc-${a.id}" onclick="adRecalcEligibility(${a.id})">🔄 Recalculate</button>` : '—'}</td></tr>`).join('') +
                 `</tbody></table></div>`;
+        }
+        async function adRecalcEligibility(appId) {
+            const btn = document.getElementById(`recalc-${appId}`);
+            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Recalculating...'; }
+            const res = await apiFetch(`/api/v1/applications/${appId}/calculate-eligibility`, { method: 'POST' });
+            if (!res.success) { showToast(res.error, 'error'); if (btn) { btn.disabled = false; btn.innerHTML = '🔄 Recalculate'; } return; }
+            showToast(res.data.status === 'MANUAL_REVIEW_REQUIRED' ? 'Recalculated — still flagged for manual review.' : `Recalculated — now ${res.data.status.replace(/_/g, ' ')}.`, res.data.status === 'MANUAL_REVIEW_REQUIRED' ? 'warning' : 'success');
+            const idx = (window._adAllApps || []).findIndex(a => a.id === appId);
+            if (idx > -1) window._adAllApps[idx] = res.data;
+            document.getElementById('as-tbl').innerHTML = adAppTable(window._adAllApps);
         }
         function adFilterApps() {
             const q = (document.getElementById('as-q').value || '').toLowerCase(), st = document.getElementById('as-st').value;
@@ -4220,7 +4277,10 @@
       ${budgets.length === 0 ? '<p class="text-sm text-muted" style="margin-bottom:10px">No regional budgets configured yet.</p>' :
                     `<div class="table-wrap" style="margin-bottom:10px"><table><thead><tr><th>Region</th><th>Allocated</th><th>Utilized</th></tr></thead><tbody>${budgets.map(b => `<tr><td>${b.regionName}</td><td>${fmtINRFull(Number(b.allocatedBudget) || 0)}</td><td>${fmtINRFull(Number(b.utilizedBudget) || 0)}</td></tr>`).join('')}</tbody></table></div>`}
       <div style="display:flex;gap:8px">
-        <input class="form-input" id="budget-region" placeholder="Region name (e.g. Rajasthan)"/>
+        <select class="form-input form-select" id="budget-region">
+          <option value="">Select region / state...</option>
+          ${INDIAN_STATES.map(s => `<option value="${s}" ${budgets.some(b => b.regionName === s) ? 'disabled' : ''}>${s}</option>`).join('')}
+        </select>
         <input class="form-input" type="number" id="budget-amt" placeholder="Allocated budget (₹)"/>
         <button class="btn btn-primary" onclick="addRegionalBudget(${schemeId},'${schemeName.replace(/'/g, "\\'")}')">+ Add</button>
       </div>
@@ -4248,7 +4308,7 @@
             const regionName = document.getElementById('budget-region').value.trim();
             const allocatedBudget = parseFloat(document.getElementById('budget-amt').value);
             const err = document.getElementById('sb-err');
-            if (!regionName || !allocatedBudget || allocatedBudget <= 0) { err.innerHTML = 'Enter a region name and a valid budget amount.'; err.style.display = 'flex'; return; }
+            if (!regionName || !allocatedBudget || allocatedBudget <= 0) { err.innerHTML = 'Select a region and enter a valid budget amount.'; err.style.display = 'flex'; return; }
             const res = await apiFetch(`/api/v1/schemes/${schemeId}/regional-budgets`, { method: 'POST', body: JSON.stringify({ regionName, allocatedBudget }) });
             if (!res.success) { err.innerHTML = res.error; err.style.display = 'flex'; return; }
             showToast('Regional budget added', 'success');
@@ -4281,12 +4341,14 @@
     </div>
     <p class="text-sm text-muted" style="margin-bottom:14px">Stage percentages must total exactly 100%. Each stage releases when its trigger milestone is completed.</p>
     <div id="plan-rows" style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
+      <div style="display:flex;gap:8px;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;padding:0 0 2px"><span style="flex:2">Stage name</span><span style="width:70px">Seq #</span><span style="width:90px">% of grant</span><span style="flex:1.5">Trigger milestone</span><span style="width:90px">Due (days)</span><span style="width:32px"></span></div>
       ${stages.map((s, i) => `
       <div style="display:flex;gap:8px;align-items:center">
         <input class="form-input" style="flex:2" value="${(s.stageName || '').replace(/"/g, '&quot;')}" placeholder="Stage name" oninput="updatePlanDraft(${i},'stageName',this.value)"/>
         <input class="form-input" style="width:70px" type="number" min="1" value="${s.sequenceNumber}" oninput="updatePlanDraft(${i},'sequenceNumber',this.value)" title="Sequence #"/>
         <input class="form-input" style="width:90px" type="number" min="1" max="100" value="${s.percentageOfGrant}" oninput="updatePlanDraft(${i},'percentageOfGrant',this.value)" title="% of grant"/>
         <select class="form-input form-select" style="flex:1.5" onchange="updatePlanDraft(${i},'triggerMilestone',this.value)">${TRIGGER_MILESTONES.map(t => `<option ${s.triggerMilestone === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <input class="form-input" style="width:90px" type="number" min="0" value="${s.dueDateOffsetDays}" oninput="updatePlanDraft(${i},'dueDateOffsetDays',this.value)" title="Due date offset, in days from schedule generation"/>
         <button class="btn btn-ghost btn-sm" onclick="removePlanRow(${i},${schemeId},'${schemeName.replace(/'/g, "\\'")}',${planId})" title="Remove stage">🗑️</button>
       </div>`).join('')}
     </div>
