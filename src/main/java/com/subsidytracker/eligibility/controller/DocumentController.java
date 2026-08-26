@@ -1,11 +1,12 @@
 package com.subsidytracker.eligibility.controller;
 
-import com.subsidytracker.common.entity.Document;
-import com.subsidytracker.common.entity.User;
-import com.subsidytracker.common.enums.DocumentVerificationStatus;
-import com.subsidytracker.eligibility.dto.DocumentResponseDto;
-import com.subsidytracker.eligibility.repository.UserRepository;
-import com.subsidytracker.eligibility.service.DocumentService;
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
+
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.http.ContentDisposition;
@@ -14,15 +15,21 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-import java.net.MalformedURLException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.List;
+import com.subsidytracker.common.entity.Document;
+import com.subsidytracker.common.entity.User;
+import com.subsidytracker.common.enums.DocumentVerificationStatus;
+import com.subsidytracker.eligibility.dto.DocumentResponseDto;
+import com.subsidytracker.eligibility.repository.UserRepository;
+import com.subsidytracker.eligibility.service.DocumentService;
 
 @RestController
 @RequestMapping("/api/v1/applications/{applicationId}/documents")
@@ -105,8 +112,10 @@ public class DocumentController {
     public ResponseEntity<DocumentResponseDto> verify(@PathVariable Long applicationId,
                                                       @PathVariable Long documentId,
                                                       @RequestParam DocumentVerificationStatus status,
-                                                      @RequestParam(required = false) String remarks) {
-        return ResponseEntity.ok(documentService.verifyDocument(documentId, status, remarks));
+                                                      @RequestParam(required = false) String remarks,
+                                                      Authentication authentication) {
+        long userId = resolveUserId(authentication);
+        return ResponseEntity.ok(documentService.verifyDocument(applicationId, documentId, status, remarks, userId));
     }
 
     /**

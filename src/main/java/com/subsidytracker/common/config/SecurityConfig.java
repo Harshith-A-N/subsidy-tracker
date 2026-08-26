@@ -6,7 +6,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -166,9 +165,11 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PATCH, "/api/v1/applications/*/resume-verification")
                     .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER")
 
-                // Document verification — officers only
+                // Document verification — Field Officer only (they're the ones who
+                // actually check KYC documents; see DocumentService.verifyDocument).
+                // ADMIN also passes via DocumentService's own role check.
                 .requestMatchers(HttpMethod.PATCH, "/api/v1/applications/*/documents/*/verify")
-                    .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER")
+                    .hasAnyRole("FIELD_OFFICER", "ADMIN")
 
                 // Manual eligibility recalculation — ADMIN only
                 .requestMatchers(HttpMethod.POST, "/api/v1/applications/*/calculate-eligibility")

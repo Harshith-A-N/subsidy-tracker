@@ -1,40 +1,36 @@
 package com.subsidytracker.eligibility.service;
 
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Set;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
 import com.subsidytracker.common.entity.Application;
 import com.subsidytracker.common.entity.Beneficiary;
 import com.subsidytracker.common.entity.Document;
 import com.subsidytracker.common.entity.User;
 import com.subsidytracker.common.enums.ApplicationStatus;
+import com.subsidytracker.common.enums.ComplianceStatus;
+import com.subsidytracker.common.enums.DisbursementScheduleStatus;
 import com.subsidytracker.common.enums.DocumentVerificationStatus;
 import com.subsidytracker.common.enums.Role;
 import com.subsidytracker.common.exception.InvalidOperationException;
 import com.subsidytracker.common.exception.ResourceNotFoundException;
+import com.subsidytracker.common.service.AuditLogService;
 import com.subsidytracker.common.service.CloudinaryService;
-import com.subsidytracker.eligibility.dto.DocumentResponseDto;
-import com.subsidytracker.eligibility.repository.ApplicationRepository;
-import com.subsidytracker.eligibility.repository.DocumentRepository;
-import com.subsidytracker.eligibility.repository.UserRepository;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
-
-import com.subsidytracker.common.enums.ComplianceStatus;
-import com.subsidytracker.common.enums.DisbursementScheduleStatus;
 import com.subsidytracker.disbursement.entity.ApplicationDisbursementSchedule;
 import com.subsidytracker.disbursement.entity.DisbursementMilestone;
 import com.subsidytracker.disbursement.entity.DisbursementStage;
 import com.subsidytracker.disbursement.repository.ApplicationDisbursementScheduleRepository;
 import com.subsidytracker.disbursement.repository.DisbursementMilestoneRepository;
 import com.subsidytracker.disbursement.repository.DisbursementStageRepository;
+import com.subsidytracker.eligibility.dto.DocumentResponseDto;
+import com.subsidytracker.eligibility.repository.ApplicationRepository;
+import com.subsidytracker.eligibility.repository.DocumentRepository;
+import com.subsidytracker.eligibility.repository.UserRepository;
 
 @Service
 public class DocumentService {
@@ -52,6 +48,7 @@ public class DocumentService {
     private final DisbursementStageRepository stageRepository;
     private final ApplicationDisbursementScheduleRepository scheduleRepository;
     private final DisbursementMilestoneRepository milestoneRepository;
+    private final AuditLogService auditLogService;
 
     public DocumentService(DocumentRepository documentRepository,
                            ApplicationRepository applicationRepository,
@@ -59,7 +56,8 @@ public class DocumentService {
                            CloudinaryService cloudinaryService,
                            DisbursementStageRepository stageRepository,
                            ApplicationDisbursementScheduleRepository scheduleRepository,
-                           DisbursementMilestoneRepository milestoneRepository) {
+                           DisbursementMilestoneRepository milestoneRepository,
+                           AuditLogService auditLogService) {
         this.documentRepository = documentRepository;
         this.applicationRepository = applicationRepository;
         this.userRepository = userRepository;
@@ -67,6 +65,7 @@ public class DocumentService {
         this.stageRepository = stageRepository;
         this.scheduleRepository = scheduleRepository;
         this.milestoneRepository = milestoneRepository;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -140,15 +139,92 @@ public class DocumentService {
         return toDto(saved);
     }
 
+    /**
+     * Marks a document VERIFIED/REJECTED/PENDING.
+     *
+     * Previously took only (documentId, status, remarks) - no caller identity
+     * at all. That meant:
+     *   - documentId was never checked against the applicationId in the URL,
+     *     so any authenticated officer could verify a document belonging to
+     *     a completely different (possibly out-of-region) application just
+     *     by knowing/guessing its id.
+     *   - there was no role/region/stage check, so a District Officer or
+     *     Finance Approver could set VERIFIED on a KYC document the Field
+     *     Officer never actually looked at - which would have silently
+     *     defeated the "all documents must be VERIFIED before Field
+     *     approval" gate in VerificationService.
+     *   - nothing was audit-logged, unlike every other state-changing
+     *     action in this codebase.
+     * This mirrors the same ownership/region/stage checks VerificationService
+     * enforces for the Field-level approval itself, since this is the one
+     * action that approval gate ultimately depends on.
+     */
     @Transactional
-    public DocumentResponseDto verifyDocument(Long documentId, DocumentVerificationStatus status, String remarks) {
+    public DocumentResponseDto verifyDocument(Long applicationId, Long documentId,
+                                              DocumentVerificationStatus status, String remarks,
+                                              long currentUserId) {
+        Application application = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Application", applicationId));
+
         Document document = documentRepository.findById(documentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Document", documentId));
+
+        // IDOR check: the document must actually belong to the application in the URL.
+        if (!document.getApplication().getId().equals(applicationId)) {
+            throw new ResourceNotFoundException("Document", documentId);
+        }
+
+        User currentUser = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", currentUserId));
+
+        if (currentUser.getRole() != Role.ADMIN) {
+            // KYC documents (Aadhar, Land Record, Income Certificate, ...) are the
+            // Field Officer's responsibility to check - see DocumentVerificationStatus.
+            // Stage-linked utilization proofs are verified through the compliance
+            // milestone workflow (ComplianceMilestoneService), not this endpoint.
+            if (currentUser.getRole() != Role.FIELD_OFFICER) {
+                throw new InvalidOperationException(
+                        "Only the assigned Field Officer (or an Administrator) may verify KYC documents.");
+            }
+
+            if (document.getStage() != null) {
+                throw new InvalidOperationException(
+                        "This endpoint verifies KYC documents only. Utilization proofs are handled "
+                                + "through the compliance milestone workflow.");
+            }
+
+            if (application.getStatus() != ApplicationStatus.FIELD_VERIFICATION_PENDING) {
+                throw new InvalidOperationException(
+                        "Documents can only be verified while the application is pending Field review. "
+                                + "Current status: " + application.getStatus());
+            }
+
+            String beneficiaryRegion = application.getBeneficiary().getRegion();
+            String officerRegion = currentUser.getRegion();
+            if (beneficiaryRegion == null || officerRegion == null
+                    || !beneficiaryRegion.equalsIgnoreCase(officerRegion)) {
+                throw new InvalidOperationException("This application is not in your assigned region.");
+            }
+        }
 
         document.setVerificationStatus(status);
         document.setRemarks(remarks);
 
-        return toDto(documentRepository.save(document));
+        Document saved = documentRepository.save(document);
+
+        try {
+            auditLogService.logEvent(
+                    "Document",
+                    saved.getId(),
+                    "DOCUMENT_" + status.name(),
+                    currentUser,
+                    "Set verification status " + status + " for document type '" + saved.getDocumentType()
+                            + "' on application id: " + applicationId);
+        } catch (Exception e) {
+            // Audit log failure must not prevent primary operation success
+        }
+
+        return toDto(saved);
     }
 
     /**
