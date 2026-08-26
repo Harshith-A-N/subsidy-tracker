@@ -1,26 +1,69 @@
 package com.subsidytracker.analytics.service;
 
-import com.subsidytracker.analytics.repository.AnalyticsRepository;
-import com.subsidytracker.common.entity.*;
-import com.subsidytracker.common.enums.*;
-import com.subsidytracker.dashboard.dto.*;
-import com.subsidytracker.disbursement.entity.*;
-import jakarta.persistence.EntityManager;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.transaction.annotation.Transactional;
 
+import com.subsidytracker.common.entity.Application;
+import com.subsidytracker.common.entity.Beneficiary;
+import com.subsidytracker.common.entity.RegionalBudget;
+import com.subsidytracker.common.entity.Scheme;
+import com.subsidytracker.common.entity.User;
+import com.subsidytracker.common.entity.Verification;
+import com.subsidytracker.common.enums.ApplicationStatus;
+import com.subsidytracker.common.enums.BeneficiaryCategory;
+import com.subsidytracker.common.enums.ComplianceStatus;
+import com.subsidytracker.common.enums.DisbursementScheduleStatus;
+import com.subsidytracker.common.enums.DisbursementStatus;
+import com.subsidytracker.common.enums.MilestoneType;
+import com.subsidytracker.common.enums.Role;
+import com.subsidytracker.common.enums.TriggerMilestone;
+import com.subsidytracker.common.enums.VerificationDecision;
+import com.subsidytracker.common.enums.VerificationLevel;
+import com.subsidytracker.dashboard.dto.ApprovalTurnaroundDto;
+import com.subsidytracker.dashboard.dto.BudgetExhaustionWarningDto;
+import com.subsidytracker.dashboard.dto.CategoryDistributionDto;
+import com.subsidytracker.dashboard.dto.DashboardOverviewDto;
+import com.subsidytracker.dashboard.dto.NonComplianceDto;
+import com.subsidytracker.dashboard.dto.PendingMilestoneSummaryDto;
+import com.subsidytracker.dashboard.dto.RegionUtilizationDto;
+import com.subsidytracker.dashboard.dto.SchemeUtilizationDto;
+import com.subsidytracker.disbursement.entity.ApplicationDisbursementSchedule;
+import com.subsidytracker.disbursement.entity.DisbursementMilestone;
+import com.subsidytracker.disbursement.entity.DisbursementPlan;
+import com.subsidytracker.disbursement.entity.DisbursementStage;
+
+import jakarta.persistence.EntityManager;
+
+// Isolated in-memory H2 database for this test class, overriding whatever
+// datasource main/application.properties resolves to (including a
+// teammate's real dev MySQL via application-local.properties).
+// @TestPropertySource has the highest property-source precedence in Spring
+// Boot tests, so these values always win regardless of config-import order.
+// Without this, the analytics aggregate queries below were counting every
+// pre-existing row already sitting in the real database on top of the rows
+// this test creates - @Transactional only rolls back what THIS test wrote,
+// so the counts/percentages/averages asserted here drifted with however
+// much other data happened to exist (e.g. "2 applications" became "12").
 @SpringBootTest
 @Transactional
+@TestPropertySource(properties = {
+        "spring.datasource.url=jdbc:h2:mem:analytics_test;DB_CLOSE_DELAY=-1;MODE=MySQL",
+        "spring.datasource.driver-class-name=org.h2.Driver",
+        "spring.datasource.username=sa",
+        "spring.datasource.password=",
+        "spring.jpa.hibernate.ddl-auto=create-drop",
+        "spring.config.import="
+})
 public class AnalyticsServiceIntegrationTest {
 
     @Autowired

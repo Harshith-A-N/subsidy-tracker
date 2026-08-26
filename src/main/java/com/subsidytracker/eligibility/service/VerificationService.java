@@ -2,6 +2,7 @@ package com.subsidytracker.eligibility.service;
 
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
@@ -9,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.subsidytracker.common.entity.Application;
 import com.subsidytracker.common.entity.Beneficiary;
+import com.subsidytracker.common.entity.Document;
 import com.subsidytracker.common.entity.SchemeSlab;
 import com.subsidytracker.common.entity.User;
 import com.subsidytracker.common.entity.Verification;
@@ -23,9 +25,11 @@ import com.subsidytracker.disbursement.service.ScheduleGenerationService;
 import com.subsidytracker.eligibility.dto.VerificationRequestDto;
 import com.subsidytracker.eligibility.dto.VerificationResponseDto;
 import com.subsidytracker.eligibility.repository.ApplicationRepository;
+import com.subsidytracker.eligibility.repository.DocumentRepository;
 import com.subsidytracker.eligibility.repository.UserRepository;
 import com.subsidytracker.eligibility.repository.VerificationRepository;
 import com.subsidytracker.scheme.repository.SchemeSlabRepository;
+import com.subsidytracker.common.enums.DocumentVerificationStatus;
 
 @Service
 public class VerificationService {
@@ -43,6 +47,7 @@ public class VerificationService {
     private final SchemeSlabRepository schemeSlabRepository;
     private final ScheduleGenerationService scheduleGenerationService;
     private final AuditLogService auditLogService;
+    private final DocumentRepository documentRepository;
 
     public VerificationService(
             ApplicationRepository applicationRepository,
@@ -50,7 +55,8 @@ public class VerificationService {
             UserRepository userRepository,
             SchemeSlabRepository schemeSlabRepository,
             ScheduleGenerationService scheduleGenerationService,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService,
+            DocumentRepository documentRepository) {
 
         this.applicationRepository = applicationRepository;
         this.verificationRepository = verificationRepository;
@@ -58,6 +64,7 @@ public class VerificationService {
         this.schemeSlabRepository = schemeSlabRepository;
         this.scheduleGenerationService = scheduleGenerationService;
         this.auditLogService = auditLogService;
+        this.documentRepository = documentRepository;
     }
 
     @Transactional
@@ -86,6 +93,20 @@ public class VerificationService {
 
         // Confirm the officer is responsible for this beneficiary's region
         validateOfficerRegion(officer, application);
+
+        // A Field Officer approval is the only point where anyone actually
+        // inspects the beneficiary's KYC documents. Nothing here previously
+        // checked Document.verificationStatus, so an application could be
+        // approved and routed on to District/Finance review while every
+        // document (Aadhar, Land Record, Income Certificate, ...) was still
+        // sitting at PENDING - i.e. never actually looked at. Reject/re-
+        // verification decisions are unaffected since they don't advance
+        // the application past this officer.
+        if (level == VerificationLevel.FIELD
+                && request.getDecision() == VerificationDecision.APPROVED) {
+
+            validateAllDocumentsVerified(application);
+        }
 
         // Record the decision
         Verification verification = new Verification();
@@ -325,6 +346,38 @@ public class VerificationService {
                             + ") does not match beneficiary's region ("
                             + beneficiaryRegion
                             + "). This officer cannot act on this application.");
+        }
+    }
+
+    // ---- Confirm every KYC document has actually been checked ----
+    // Only KYC documents (stage == null) count here - disbursement-phase
+    // utilization proofs are a separate, later verification concern.
+    private void validateAllDocumentsVerified(Application application) {
+
+        List<Document> documents =
+                documentRepository.findByApplicationIdAndStageIsNull(
+                        application.getId());
+
+        if (documents.isEmpty()) {
+
+            throw new InvalidOperationException(
+                    "Cannot approve: no documents have been submitted "
+                            + "for this application.");
+        }
+
+        boolean hasUncheckedDocument =
+                documentRepository
+                        .existsByApplicationIdAndStageIsNullAndVerificationStatusNot(
+                                application.getId(),
+                                DocumentVerificationStatus.VERIFIED);
+
+        if (hasUncheckedDocument) {
+
+            throw new InvalidOperationException(
+                    "Cannot approve: one or more submitted documents have "
+                            + "not been marked VERIFIED yet. Every document "
+                            + "must be individually reviewed before the "
+                            + "application can be approved.");
         }
     }
 
