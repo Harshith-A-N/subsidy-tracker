@@ -64,8 +64,6 @@ Thumbs.db
 # Local environment / secrets (DB credentials, local configs, JWT secrets)
 application-local.properties
 src/main/resources/application-local.properties
-application.properties
-src/main/resources/application.properties
 .env
 uploads/documents/
 
