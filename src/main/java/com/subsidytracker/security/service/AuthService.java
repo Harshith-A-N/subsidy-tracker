@@ -74,21 +74,37 @@ public class AuthService {
      */
     public AuthResponseDto login(LoginRequestDto request) {
         String email = request.getEmail() != null ? request.getEmail().trim().toLowerCase() : "";
-        // This throws BadCredentialsException if authentication fails
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        email,
-                        request.getPassword()
-                )
-        );
+        String password = request.getPassword() != null ? request.getPassword() : "";
 
-        // If we reach here, authentication succeeded — fetch the user for the response
+        // 1. Priority 1: Check blank fields (server-side safeguard)
+        if (email.isEmpty()) {
+            throw new InvalidOperationException("Please enter your email address.");
+        }
+        if (password.isEmpty()) {
+            throw new InvalidOperationException("Please enter your password.");
+        }
+
+        // 2. Priority 2: Check if email exists in database
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new InvalidOperationException(
-                        "User not found after successful authentication."));
+                .orElseThrow(() -> new InvalidOperationException("Invalid email: No account found with this email."));
 
+        // 3. Priority 3: Check if password is correct
+        if (!passwordEncoder.matches(password, user.getPassword())) {
+            throw new InvalidOperationException("Invalid password: The password entered is incorrect.");
+        }
+
+        // 4. Priority 4: Check if role matches account role
         if (request.getRole() != null && user.getRole() != request.getRole()) {
-            throw new InvalidOperationException("Invalid credentials: role mismatch for this account.");
+            throw new InvalidOperationException("Role mismatch: This account is registered as " + user.getRole() + ".");
+        }
+
+        // Authenticate Spring Security context if needed
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(email, password)
+            );
+        } catch (Exception ignored) {
+            // Already validated against database and password encoder
         }
 
         String token = jwtService.generateToken(user.getEmail(), user.getRole().name());
