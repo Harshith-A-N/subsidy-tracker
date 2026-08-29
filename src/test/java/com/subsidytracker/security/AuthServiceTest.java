@@ -2,6 +2,7 @@ package com.subsidytracker.security;
 
 import com.subsidytracker.common.entity.User;
 import com.subsidytracker.common.enums.Role;
+import com.subsidytracker.common.exception.InvalidOperationException;
 import com.subsidytracker.eligibility.repository.UserRepository;
 import com.subsidytracker.security.dto.AuthResponseDto;
 import com.subsidytracker.security.dto.LoginRequestDto;
@@ -82,15 +83,16 @@ class AuthServiceTest {
         User user = new User();
         user.setId(10L);
         user.setEmail("user@example.com");
+        user.setPassword("hashedSecret123");
         user.setFullName("Test User");
         user.setRole(Role.BENEFICIARY);
 
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("secret123", "hashedSecret123")).thenReturn(true);
         when(jwtService.generateToken("user@example.com", "BENEFICIARY")).thenReturn("mocked.jwt.token");
 
         AuthResponseDto response = authService.login(loginRequest);
 
-        verify(authenticationManager).authenticate(any(UsernamePasswordAuthenticationToken.class));
         assertThat(response).isNotNull();
         assertThat(response.getUserId()).isEqualTo(10L);
         assertThat(response.getEmail()).isEqualTo("user@example.com");
@@ -100,33 +102,36 @@ class AuthServiceTest {
     }
 
     @Test
-    void login_InvalidPassword_ShouldThrowBadCredentialsException() {
+    void login_InvalidPassword_ShouldThrowInvalidOperationException() {
         LoginRequestDto loginRequest = new LoginRequestDto();
         loginRequest.setEmail("user@example.com");
         loginRequest.setPassword("wrongpassword");
 
-        doThrow(new BadCredentialsException("Bad credentials"))
-                .when(authenticationManager).authenticate(any(UsernamePasswordAuthenticationToken.class));
+        User user = new User();
+        user.setEmail("user@example.com");
+        user.setPassword("hashedPassword");
+
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("wrongpassword", "hashedPassword")).thenReturn(false);
 
         assertThatThrownBy(() -> authService.login(loginRequest))
-                .isInstanceOf(BadCredentialsException.class)
-                .hasMessage("Bad credentials");
+                .isInstanceOf(InvalidOperationException.class)
+                .hasMessageContaining("Invalid password");
 
-        verify(userRepository, never()).findByEmail(anyString());
         verify(jwtService, never()).generateToken(anyString(), anyString());
     }
 
     @Test
-    void login_UnknownUser_ShouldThrowBadCredentialsException() {
+    void login_UnknownUser_ShouldThrowInvalidOperationException() {
         LoginRequestDto loginRequest = new LoginRequestDto();
         loginRequest.setEmail("unknown@example.com");
         loginRequest.setPassword("anyPassword");
 
-        doThrow(new BadCredentialsException("User not found"))
-                .when(authenticationManager).authenticate(any(UsernamePasswordAuthenticationToken.class));
+        when(userRepository.findByEmail("unknown@example.com")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.login(loginRequest))
-                .isInstanceOf(BadCredentialsException.class);
+                .isInstanceOf(InvalidOperationException.class)
+                .hasMessageContaining("Invalid email");
 
         verify(jwtService, never()).generateToken(anyString(), anyString());
     }
@@ -141,14 +146,16 @@ class AuthServiceTest {
         User user = new User();
         user.setId(10L);
         user.setEmail("user@example.com");
+        user.setPassword("hashedSecret123");
         user.setFullName("Test User");
         user.setRole(Role.BENEFICIARY);
 
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("secret123", "hashedSecret123")).thenReturn(true);
 
         assertThatThrownBy(() -> authService.login(loginRequest))
-                .isInstanceOf(com.subsidytracker.common.exception.InvalidOperationException.class)
-                .hasMessageContaining("role mismatch");
+                .isInstanceOf(InvalidOperationException.class)
+                .hasMessageContaining("Role mismatch");
 
         verify(jwtService, never()).generateToken(anyString(), anyString());
     }
@@ -163,10 +170,12 @@ class AuthServiceTest {
         User user = new User();
         user.setId(10L);
         user.setEmail("user@example.com");
+        user.setPassword("hashedSecret123");
         user.setFullName("Test User");
         user.setRole(Role.BENEFICIARY);
 
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("secret123", "hashedSecret123")).thenReturn(true);
         when(jwtService.generateToken("user@example.com", "BENEFICIARY")).thenReturn("mocked.jwt.token");
 
         AuthResponseDto response = authService.login(loginRequest);

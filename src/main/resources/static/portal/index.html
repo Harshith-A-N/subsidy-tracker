@@ -1603,7 +1603,7 @@
             { id: 'BEN001', name: 'Ramesh Kumar Sharma', email: 'ramesh@example.com', password: 'pass123', role: 'beneficiary', region: 'Rajasthan', avatar: 'R', createdAt: '2026-06-01', phone: '9876543210', aadhaar: 'XXXX-XXXX-1234', incomePerAnnum: 180000, landAcres: 5.5, category: 'OBC', bankAccount: '1234567890', ifsc: 'SBIN0001234' },
             { id: 'BEN002', name: 'Sunita Devi', email: 'sunita@example.com', password: 'pass123', role: 'beneficiary', region: 'Uttar Pradesh', avatar: 'S', createdAt: '2026-06-20', phone: '9876500001', aadhaar: 'XXXX-XXXX-5678', incomePerAnnum: 120000, landAcres: 0, category: 'SC', bankAccount: '9876543210', ifsc: 'PNB0001234' },
             { id: 'FO001', name: 'Rajesh Singh', email: 'fo@govgrant.in', password: 'fo123', role: 'field_officer', region: 'Rajasthan', avatar: 'R', createdAt: '2026-01-10', phone: '9988776655', employeeId: 'FO-RAJ-001', assignedDistrict: 'Jaipur', designation: 'Junior Field Inspector' },
-            { id: 'DO001', name: 'Priya Nair', email: 'do@govgrant.in', password: 'do123', role: 'district_officer', region: 'Rajasthan', avatar: 'P', createdAt: '2026-01-10', phone: '9988776600', employeeId: 'DO-RAJ-001', district: 'Jaipur', designation: 'District Welfare Officer' },
+            { id: 'DO001', name: 'Priya Nair', email: 'do@gmail.com', password: 'do123', role: 'district_officer', region: 'Rajasthan', avatar: 'P', createdAt: '2026-01-10', phone: '9988776600', employeeId: 'DO-RAJ-001', district: 'Jaipur', designation: 'District Welfare Officer' },
             { id: 'FA001', name: 'Suresh Iyer', email: 'fa@govgrant.in', password: 'fa123', role: 'finance_approver', region: 'All', avatar: 'S', createdAt: '2026-01-10', phone: '9988001122', employeeId: 'FA-HQ-001', designation: 'Senior Finance Controller' }
         ];
         const SEED_APPS = [
@@ -2162,7 +2162,7 @@
       <div><strong>New user?</strong> Please <a onclick="navigate('register')" href="javascript:void(0)" style="color:var(--primary-light);font-weight:700">Register first</a> before signing in.<br>
       <span style="font-size:11px;margin-top:4px;display:block;color:var(--text-dim)">Government officials (Field Officer, District Officer etc.) use your assigned credentials.</span></div>
     </div>
-    <form class="auth-form" onsubmit="handleLogin(event)">
+    <form class="auth-form" onsubmit="handleLogin(event)" novalidate>
       <div class="form-group">
         <label class="form-label">Role <span class="req">*</span></label>
         <div class="input-icon-wrap">
@@ -2195,17 +2195,51 @@
             if (ev && ev.preventDefault) ev.preventDefault();
             const err = document.getElementById('l-err'), btn = document.getElementById('l-btn');
             if (!err || !btn) return;
+
             const roleSelect = document.getElementById('l-role');
-            const roleVal = roleSelect ? roleSelect.value : '';
-            if (!roleVal) {
-                err.innerHTML = '⚠️ Please select your role.';
+            const emailInput = document.getElementById('l-email');
+            const passInput = document.getElementById('l-pass');
+
+            const roleVal = roleSelect ? roleSelect.value.trim() : '';
+            const emailVal = emailInput ? emailInput.value.trim() : '';
+            const passVal = passInput ? passInput.value : '';
+
+            // Priority 1: Check for blank fields
+            if (!roleVal && !emailVal && !passVal) {
+                err.innerHTML = '⚠️ Please fill in all required fields (Role, Email, and Password).';
                 err.style.display = 'flex';
                 return;
             }
+            if (!roleVal) {
+                err.innerHTML = '⚠️ Please select your role.';
+                err.style.display = 'flex';
+                if (roleSelect) roleSelect.focus();
+                return;
+            }
+            if (!emailVal) {
+                err.innerHTML = '⚠️ Please enter your email address.';
+                err.style.display = 'flex';
+                if (emailInput) emailInput.focus();
+                return;
+            }
+            if (!passVal) {
+                err.innerHTML = '⚠️ Please enter your password.';
+                err.style.display = 'flex';
+                if (passInput) passInput.focus();
+                return;
+            }
+
             err.style.display = 'none'; btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Signing in...';
-            const r = await login(document.getElementById('l-email').value.trim(), document.getElementById('l-pass').value, roleVal);
-            if (r.success) { showToast('Welcome back, ' + r.user.name + '! 👋', 'success'); navigate(dashPage(r.user.role)); }
-            else { btn.disabled = false; btn.innerHTML = '🔐 Sign In to Dashboard'; err.innerHTML = '⚠️ ' + r.error; err.style.display = 'flex'; }
+            const r = await login(emailVal, passVal, roleVal);
+            if (r.success) {
+                showToast('Welcome back, ' + r.user.name + '! 👋', 'success');
+                navigate(dashPage(r.user.role));
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = '🔐 Sign In to Dashboard';
+                err.innerHTML = '⚠️ ' + r.error;
+                err.style.display = 'flex';
+            }
         }
 
         /* ================================================================
