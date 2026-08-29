@@ -93,6 +93,11 @@ public class BeneficiaryService {
                 .toList();
     }
 
+    public org.springframework.data.domain.Page<BeneficiaryResponseDto> getAllBeneficiaries(org.springframework.data.domain.Pageable pageable) {
+        return beneficiaryRepository.findAll(pageable)
+                .map(this::toResponseDto);
+    }
+
     /**
      * Updates a beneficiary profile.
      * The caller must be the owner of this profile or an ADMIN.

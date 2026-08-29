@@ -7,9 +7,13 @@ import org.springframework.stereotype.Repository;
 
 import com.subsidytracker.disbursement.entity.ApplicationDisbursementSchedule;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 @Repository
 public interface ApplicationDisbursementScheduleRepository extends JpaRepository<ApplicationDisbursementSchedule, Long> {
     List<ApplicationDisbursementSchedule> findByApplicationIdOrderByStageSequenceNumberAsc(Long applicationId);
+    Page<ApplicationDisbursementSchedule> findByApplicationIdOrderByStageSequenceNumberAsc(Long applicationId, Pageable pageable);
 
     boolean existsByApplicationId(Long applicationId);
 

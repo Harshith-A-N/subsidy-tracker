@@ -14,8 +14,7 @@ public class AnalyticsRepository {
 
     public List<Object[]> getSchemeUtilizations() {
         // totalBudget is derived from summing this scheme's RegionalBudget rows
-        // (same source of truth as region-level utilization), not from the
-        // unused Scheme.totalBudget column — see Scheme.java for why.
+        // (same source of truth as region-level utilization).
         String jpql = "SELECT s.id, s.name, " +
                       "COALESCE((SELECT SUM(rb.allocatedBudget) FROM RegionalBudget rb WHERE rb.scheme.id = s.id), 0), " +
                       "COALESCE((SELECT SUM(ads.scheduledAmount) " +

@@ -5,6 +5,10 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,7 +29,6 @@ import com.subsidytracker.scheme.repository.SchemeSlabRepository;
 import com.subsidytracker.common.entity.User;
 import com.subsidytracker.common.service.AuditLogService;
 
-import com.subsidytracker.common.entity.User;
 import com.subsidytracker.common.enums.ComplianceStatus;
 import com.subsidytracker.common.enums.Role;
 import com.subsidytracker.disbursement.entity.DisbursementMilestone;
@@ -35,6 +38,8 @@ import com.subsidytracker.scheme.repository.RegionalBudgetRepository;
 
 @Service
 public class ScheduleGenerationService {
+
+    private static final Logger logger = LoggerFactory.getLogger(ScheduleGenerationService.class);
 
     private static final int DAYS_BETWEEN_STAGES = 7;
 
@@ -146,7 +151,8 @@ public class ScheduleGenerationService {
                     userId != null ? userRepository.findById(userId).orElse(null) : null,
                     "Released stage " + schedule.getStage().getStageName() + " (" + schedule.getScheduledAmount() + ") for application id: " + applicationId);
         } catch (Exception e) {
-            // Audit log failure must not block primary operation
+            logger.warn("Failed to log audit event [entityType=ApplicationDisbursementSchedule, entityId={}, action=STAGE_RELEASED]: {}",
+                    schedule.getId(), e.getMessage(), e);
         }
 
         return saved;
@@ -179,7 +185,8 @@ public class ScheduleGenerationService {
                     (User) null,
                     "Generated disbursement schedule with " + savedSchedules.size() + " stages for application id: " + applicationId);
         } catch (Exception e) {
-            // Audit log failure must not prevent primary operation success
+            logger.warn("Failed to log audit event [entityType=ApplicationDisbursementSchedule, entityId={}, action=SCHEDULE_GENERATED]: {}",
+                    applicationId, e.getMessage(), e);
         }
 
         return savedSchedules;
@@ -187,6 +194,10 @@ public class ScheduleGenerationService {
 
     public List<ApplicationDisbursementSchedule> getScheduleByApplication(Long applicationId) {
         return scheduleRepository.findByApplicationIdOrderByStageSequenceNumberAsc(applicationId);
+    }
+
+    public Page<ApplicationDisbursementSchedule> getScheduleByApplication(Long applicationId, Pageable pageable) {
+        return scheduleRepository.findByApplicationIdOrderByStageSequenceNumberAsc(applicationId, pageable);
     }
 
     // ---------- Load Helpers ----------

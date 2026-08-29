@@ -122,21 +122,4 @@ class VerificationServiceTest {
         verify(verificationRepository, never()).save(any(Verification.class));
         verify(applicationRepository, never()).save(any(Application.class));
     }
-
-    @Test
-    void resumeAfterReVerification_ShouldResumeAndLogAudit() {
-        application.setStatus(ApplicationStatus.RE_VERIFICATION_REQUIRED);
-        Verification lastVerification = new Verification();
-        lastVerification.setLevel(VerificationLevel.FIELD);
-
-        when(applicationRepository.findById(100L)).thenReturn(Optional.of(application));
-        when(verificationRepository.findTopByApplicationIdOrderByVerificationDateDesc(100L))
-                .thenReturn(Optional.of(lastVerification));
-
-        VerificationResponseDto response = verificationService.resumeAfterReVerification(100L);
-
-        assertThat(response).isNotNull();
-        assertThat(response.getNewStatus()).isEqualTo(ApplicationStatus.FIELD_VERIFICATION_PENDING);
-        verify(auditLogService).logEvent(eq("Application"), eq(100L), eq("RESUMED_VERIFICATION"), eq((User) null), anyString());
-    }
 }

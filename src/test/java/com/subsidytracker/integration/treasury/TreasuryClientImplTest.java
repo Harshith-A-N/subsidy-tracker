@@ -30,7 +30,7 @@ class TreasuryClientImplTest {
         objectMapper = new ObjectMapper();
         RestClient.Builder builder = RestClient.builder();
         mockServer = MockRestServiceServer.bindTo(builder).build();
-        treasuryClient = new TreasuryClientImpl(builder);
+        treasuryClient = new TreasuryClientImpl(builder, "http://localhost:8080/mock/external-treasury");
     }
 
     @Test

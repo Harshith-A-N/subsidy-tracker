@@ -169,8 +169,6 @@ public class SecurityConfig {
                 // Verification actions — officers only
                 .requestMatchers(HttpMethod.PATCH, "/api/v1/applications/*/verify")
                     .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER")
-                .requestMatchers(HttpMethod.PATCH, "/api/v1/applications/*/resume-verification")
-                    .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER")
 
                 // Document verification — Field Officer only (they're the ones who
                 // actually check KYC documents; see DocumentService.verifyDocument).

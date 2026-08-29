@@ -2,6 +2,8 @@ package com.subsidytracker.disbursement.controller;
 
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -12,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.subsidytracker.common.entity.Application;
@@ -114,12 +117,14 @@ public class DisbursementController {
      * officers/finance/admin may view any application's schedule.
      */
     @GetMapping("/schedules/application/{applicationId}")
-    public ResponseEntity<List<ScheduleEntryResponse>> getSchedule(@PathVariable Long applicationId,
-                                                                    Authentication authentication) {
+    public ResponseEntity<Page<ScheduleEntryResponse>> getSchedule(@PathVariable Long applicationId,
+                                                                   @RequestParam(defaultValue = "0") int page,
+                                                                   @RequestParam(defaultValue = "20") int size,
+                                                                   Authentication authentication) {
         assertCanViewApplication(applicationId, authentication);
-        List<ApplicationDisbursementSchedule> schedules =
-                scheduleGenerationService.getScheduleByApplication(applicationId);
-        return ResponseEntity.ok(toScheduleResponseList(schedules));
+        Page<ApplicationDisbursementSchedule> schedules =
+                scheduleGenerationService.getScheduleByApplication(applicationId, PageRequest.of(page, size));
+        return ResponseEntity.ok(schedules.map(this::toScheduleResponse));
     }
 
     // ---------- Mapping Helpers ----------

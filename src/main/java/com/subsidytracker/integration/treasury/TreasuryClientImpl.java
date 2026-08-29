@@ -2,6 +2,7 @@ package com.subsidytracker.integration.treasury;
 
 import com.subsidytracker.integration.treasury.dto.TreasuryDisbursementRequest;
 import com.subsidytracker.integration.treasury.dto.TreasuryDisbursementResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -11,9 +12,10 @@ public class TreasuryClientImpl implements TreasuryClient {
 
     private final RestClient restClient;
 
-    public TreasuryClientImpl(RestClient.Builder restClientBuilder) {
+    public TreasuryClientImpl(RestClient.Builder restClientBuilder,
+                              @Value("${treasury.mock.base-url}") String baseUrl) {
         this.restClient = restClientBuilder
-                .baseUrl("http://localhost:8080/mock/external-treasury")
+                .baseUrl(baseUrl)
                 .build();
     }
 

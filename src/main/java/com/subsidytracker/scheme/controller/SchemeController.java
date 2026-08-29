@@ -2,6 +2,8 @@ package com.subsidytracker.scheme.controller;
 
 import com.subsidytracker.scheme.dto.*;
 import com.subsidytracker.scheme.service.SchemeService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -39,14 +41,17 @@ public class SchemeController {
     }
 
     @GetMapping
-    public ResponseEntity<List<SchemeResponseDto>> getAll(Authentication authentication) {
+    public ResponseEntity<Page<SchemeResponseDto>> getAll(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
         boolean isAdmin = authentication != null && authentication.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
 
         if (isAdmin) {
-            return ResponseEntity.ok(schemeService.getAllSchemes());
+            return ResponseEntity.ok(schemeService.getAllSchemes(PageRequest.of(page, size)));
         }
-        return ResponseEntity.ok(schemeService.getActiveSchemes());
+        return ResponseEntity.ok(schemeService.getActiveSchemes(PageRequest.of(page, size)));
     }
 
     @PutMapping("/{id}")

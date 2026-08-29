@@ -1673,6 +1673,14 @@
                 // login form shows a clean message.
                 return { success: false, error: msg.replace(/^An unexpected error occurred:\s*/, ''), status: res.status };
             }
+            if (body && Array.isArray(body.content)) {
+                const arr = body.content;
+                arr.page = body.number;
+                arr.size = body.size;
+                arr.totalElements = body.totalElements;
+                arr.totalPages = body.totalPages;
+                return { success: true, data: arr, raw: body, status: res.status };
+            }
             return { success: true, data: body, status: res.status };
         }
 
