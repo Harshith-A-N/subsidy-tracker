@@ -261,20 +261,6 @@
             background: rgba(79, 70, 229, .1)
         }
 
-        .btn-back {
-            background: var(--bg-surface);
-            color: var(--text-muted);
-            border: 1.5px solid var(--border);
-            padding: 9px 18px;
-            font-size: 13px;
-            border-radius: 10px
-        }
-
-        .btn-back:hover {
-            color: var(--text);
-            border-color: var(--text-muted);
-            transform: translateX(-2px)
-        }
 
         .btn-lg {
             padding: 14px 30px;
@@ -1846,10 +1832,12 @@
 
         function getCurrentUser() { try { const r = sessionStorage.getItem(AUTH_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }
         function setCurrentUser(u) { sessionStorage.setItem(AUTH_KEY, JSON.stringify(u)); }
-        function logout() { sessionStorage.removeItem(AUTH_KEY); clearToken(); try { sessionStorage.removeItem('pending_reg_profile'); } catch(e) {} showToast('Logged out successfully', 'info'); navigate('landing', null, { clearHistory: true }); }
+        function logout() { sessionStorage.removeItem(AUTH_KEY); clearToken(); try { sessionStorage.removeItem('pending_reg_profile'); } catch(e) {} showToast('Logged out successfully', 'info'); navigate('landing'); }
 
-        async function login(email, password) {
-            const r = await apiFetch('/api/v1/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+        async function login(email, password, role) {
+            const payload = { email, password };
+            if (role) payload.role = role;
+            const r = await apiFetch('/api/v1/auth/login', { method: 'POST', body: JSON.stringify(payload) });
             if (!r.success || !r.data) return { success: false, error: r.error || 'Login failed. Please verify backend server is running.' };
             const d = r.data;
             if (!d || !d.token) return { success: false, error: 'Invalid response format from server.' };
@@ -1876,8 +1864,8 @@
 
         function requireAuth(roles) {
             const u = getCurrentUser();
-            if (!u || !getToken()) { navigate('login', null, { replace: true, clearHistory: true }); return null; }
-            if (roles && roles.length && !roles.includes(u.role)) { showToast('Access denied for your role.', 'error'); navigate('login', null, { replace: true, clearHistory: true }); return null; }
+            if (!u || !getToken()) { navigate('login'); return null; }
+            if (roles && roles.length && !roles.includes(u.role)) { showToast('Access denied for your role.', 'error'); navigate('login'); return null; }
             return u;
         }
         function getRoleLabel(r) { return { beneficiary: 'Beneficiary', field_officer: 'Field Officer', district_officer: 'District Officer', finance_approver: 'Finance Approver', admin: 'Administrator' }[r] || r; }
@@ -1885,38 +1873,15 @@
         function dashPage(role) { return { beneficiary: 'beneficiary', field_officer: 'field_officer', district_officer: 'district_officer', finance_approver: 'finance_approver', admin: 'admin' }[role] || 'landing'; }
 
         /* ================================================================
-           ROUTER with HISTORY (BACK BUTTON)
+           ROUTER
         ================================================================ */
-        let _page = 'landing', _sub = null, _history = [];
+        let _page = 'landing', _sub = null;
 
-        function navigate(page, sub, options = {}) {
-            const newSub = sub || null;
-            if (options.clearHistory || page === 'login' || page === 'landing') {
-                _history = [];
-            } else if (!options.replace) {
-                if (_page !== page || _sub !== newSub) {
-                    if (_page !== 'landing' && _page !== 'login') {
-                        _history.push({ page: _page, sub: _sub });
-                        if (_history.length > 30) _history.shift();
-                    }
-                }
-            }
-            _page = page; _sub = newSub;
+        function navigate(page, sub) {
+            _page = page;
+            _sub = sub || null;
             window.scrollTo(0, 0);
             renderPage();
-        }
-
-        function goBack() {
-            if (_history.length > 0) {
-                const prev = _history.pop();
-                _page = prev.page; _sub = prev.sub;
-                window.scrollTo(0, 0);
-                renderPage();
-            } else {
-                const u = getCurrentUser();
-                if (u) navigate(dashPage(u.role));
-                else navigate('landing');
-            }
         }
 
         function renderPage() {
@@ -1928,18 +1893,9 @@
         }
 
         /* ---- SHARED UI COMPONENTS ---- */
-        function backBtn(label = '← Go Back') {
-            return `<button class="btn btn-back" onclick="goBack()" style="margin-bottom:20px">${label}</button>`;
-        }
-        function homeBtn(label = '← Back to Home') {
-            return `<button class="btn btn-back" onclick="navigate('landing')" style="margin-bottom:20px">${label}</button>`;
-        }
-
         function navbar(user) {
-            const showBack = _history.length > 0;
             return `<nav class="navbar"><div class="navbar-inner">
     <div class="navbar-left">
-      ${showBack ? `<button class="btn btn-back btn-sm" onclick="goBack()" style="margin-right:4px">← Back</button>` : ''}
       <div class="navbar-brand" onclick="navigate('${dashPage(user.role)}')">
         <div class="brand-icon">🏛️</div>
         <div><div>GovGrant</div><div style="font-size:9px;color:var(--text-dim);font-weight:400">Portal</div></div>
@@ -2183,8 +2139,7 @@
             container.innerHTML = `
   <div class="auth-page"><div class="auth-bg"></div>
   <div class="auth-card">
-    <div style="margin-bottom:20px">${homeBtn('← Back to Home')}</div>
-    <div class="auth-logo"><div class="logo-icon">🏛️</div><div><div class="logo-text">GovGrant Portal</div><div class="logo-sub">Secure Government Access</div></div></div>
+    <div class="auth-logo" onclick="navigate('landing')" style="cursor:pointer" title="Go to home"><div class="logo-icon">🏛️</div><div><div class="logo-text">GovGrant Portal</div><div class="logo-sub">Secure Government Access</div></div></div>
     <h1 class="auth-title">Sign In</h1>
     <p class="auth-sub">Use your registered email and password to access your dashboard</p>
     <div class="alert alert-info" style="margin-bottom:20px">
@@ -2193,6 +2148,20 @@
       <span style="font-size:11px;margin-top:4px;display:block;color:var(--text-dim)">Government officials (Field Officer, District Officer etc.) use your assigned credentials.</span></div>
     </div>
     <form class="auth-form" onsubmit="handleLogin(event)">
+      <div class="form-group">
+        <label class="form-label">Role <span class="req">*</span></label>
+        <div class="input-icon-wrap">
+          <span class="icon">👤</span>
+          <select class="form-input form-select" id="l-role" required style="padding-left:38px">
+            <option value="" disabled selected>Select your role...</option>
+            <option value="BENEFICIARY">👨‍🌾 Beneficiary</option>
+            <option value="FIELD_OFFICER">🔍 Field Officer</option>
+            <option value="DISTRICT_OFFICER">📋 District Officer</option>
+            <option value="FINANCE_APPROVER">💰 Finance Approver</option>
+            <option value="ADMIN">⚙️ Administrator</option>
+          </select>
+        </div>
+      </div>
       <div class="form-group">
         <label class="form-label">Email Address <span class="req">*</span></label>
         <div class="input-icon-wrap"><span class="icon">📧</span><input class="form-input" type="email" id="l-email" placeholder="your@email.com" required autocomplete="email"/></div>
@@ -2211,9 +2180,16 @@
             if (ev && ev.preventDefault) ev.preventDefault();
             const err = document.getElementById('l-err'), btn = document.getElementById('l-btn');
             if (!err || !btn) return;
+            const roleSelect = document.getElementById('l-role');
+            const roleVal = roleSelect ? roleSelect.value : '';
+            if (!roleVal) {
+                err.innerHTML = '⚠️ Please select your role.';
+                err.style.display = 'flex';
+                return;
+            }
             err.style.display = 'none'; btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Signing in...';
-            const r = await login(document.getElementById('l-email').value.trim(), document.getElementById('l-pass').value);
-            if (r.success) { showToast('Welcome back, ' + r.user.name + '! 👋', 'success'); _history = []; navigate(dashPage(r.user.role)); }
+            const r = await login(document.getElementById('l-email').value.trim(), document.getElementById('l-pass').value, roleVal);
+            if (r.success) { showToast('Welcome back, ' + r.user.name + '! 👋', 'success'); navigate(dashPage(r.user.role)); }
             else { btn.disabled = false; btn.innerHTML = '🔐 Sign In to Dashboard'; err.innerHTML = '⚠️ ' + r.error; err.style.display = 'flex'; }
         }
 
@@ -2224,8 +2200,7 @@
             container.innerHTML = `
   <div class="auth-page" style="align-items:flex-start;padding-top:40px"><div class="auth-bg"></div>
   <div class="auth-card auth-card-wide">
-    <div style="margin-bottom:20px">${homeBtn('← Back to Home')}</div>
-    <div class="auth-logo"><div class="logo-icon">🏛️</div><div><div class="logo-text">GovGrant Portal</div><div class="logo-sub">Create Your Account</div></div></div>
+    <div class="auth-logo" onclick="navigate('landing')" style="cursor:pointer" title="Go to home"><div class="logo-icon">🏛️</div><div><div class="logo-text">GovGrant Portal</div><div class="logo-sub">Create Your Account</div></div></div>
     <h1 class="auth-title">Register</h1>
     <p class="auth-sub">Fill in your details to create your account. After registering, you can sign in to access the portal.</p>
 
@@ -2445,7 +2420,6 @@
                 const r = await register(data);
                 if (r.success) {
                     showToast('Welcome, ' + r.user.name + '! Your account is ready. 🎉', 'success');
-                    _history = [];
                     navigate(dashPage(r.user.role));
                 }
                 else {
