@@ -4,7 +4,6 @@ import com.subsidytracker.common.entity.User;
 import com.subsidytracker.common.enums.RequestStatus;
 import com.subsidytracker.common.enums.Role;
 import com.subsidytracker.common.exception.InvalidOperationException;
-import com.subsidytracker.common.service.AuditLogService;
 import com.subsidytracker.eligibility.repository.UserRepository;
 import com.subsidytracker.security.dto.LoginRequestDto;
 import com.subsidytracker.security.dto.OfficerRegistrationRequestDto;

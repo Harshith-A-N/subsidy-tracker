@@ -1846,7 +1846,7 @@
 
         function getCurrentUser() { try { const r = sessionStorage.getItem(AUTH_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }
         function setCurrentUser(u) { sessionStorage.setItem(AUTH_KEY, JSON.stringify(u)); }
-        function logout() { sessionStorage.removeItem(AUTH_KEY); clearToken(); showToast('Logged out successfully', 'info'); navigate('landing'); }
+        function logout() { sessionStorage.removeItem(AUTH_KEY); clearToken(); try { sessionStorage.removeItem('pending_reg_profile'); } catch(e) {} showToast('Logged out successfully', 'info'); navigate('landing', null, { clearHistory: true }); }
 
         async function login(email, password) {
             const r = await apiFetch('/api/v1/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
@@ -1876,8 +1876,8 @@
 
         function requireAuth(roles) {
             const u = getCurrentUser();
-            if (!u || !getToken()) { navigate('login'); return null; }
-            if (roles && roles.length && !roles.includes(u.role)) { showToast('Access denied for your role.', 'error'); navigate('login'); return null; }
+            if (!u || !getToken()) { navigate('login', null, { replace: true, clearHistory: true }); return null; }
+            if (roles && roles.length && !roles.includes(u.role)) { showToast('Access denied for your role.', 'error'); navigate('login', null, { replace: true, clearHistory: true }); return null; }
             return u;
         }
         function getRoleLabel(r) { return { beneficiary: 'Beneficiary', field_officer: 'Field Officer', district_officer: 'District Officer', finance_approver: 'Finance Approver', admin: 'Administrator' }[r] || r; }
@@ -1889,12 +1889,19 @@
         ================================================================ */
         let _page = 'landing', _sub = null, _history = [];
 
-        function navigate(page, sub) {
-            if (_page !== 'landing' && _page !== page) {
-                _history.push({ page: _page, sub: _sub });
-                if (_history.length > 30) _history.shift();
+        function navigate(page, sub, options = {}) {
+            const newSub = sub || null;
+            if (options.clearHistory || page === 'login' || page === 'landing') {
+                _history = [];
+            } else if (!options.replace) {
+                if (_page !== page || _sub !== newSub) {
+                    if (_page !== 'landing' && _page !== 'login') {
+                        _history.push({ page: _page, sub: _sub });
+                        if (_history.length > 30) _history.shift();
+                    }
+                }
             }
-            _page = page; _sub = sub || null;
+            _page = page; _sub = newSub;
             window.scrollTo(0, 0);
             renderPage();
         }
@@ -1903,6 +1910,7 @@
             if (_history.length > 0) {
                 const prev = _history.pop();
                 _page = prev.page; _sub = prev.sub;
+                window.scrollTo(0, 0);
                 renderPage();
             } else {
                 const u = getCurrentUser();
@@ -1923,6 +1931,9 @@
         function backBtn(label = '← Go Back') {
             return `<button class="btn btn-back" onclick="goBack()" style="margin-bottom:20px">${label}</button>`;
         }
+        function homeBtn(label = '← Back to Home') {
+            return `<button class="btn btn-back" onclick="navigate('landing')" style="margin-bottom:20px">${label}</button>`;
+        }
 
         function navbar(user) {
             const showBack = _history.length > 0;
@@ -1940,7 +1951,6 @@
         <div class="user-avatar">${user.avatar || user.name[0]}</div>
         <span style="font-size:13px;font-weight:600;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${user.name.split(' ')[0]}</span>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="logout()" style="color:var(--danger)">🚪 Logout</button>
     </div>
   </div></nav>`;
         }
@@ -1960,7 +1970,6 @@
             });
             h += `<div class="sidebar-spacer"></div>
   <div class="sidebar-sep"></div>
-  <button class="sidebar-link" onclick="navigate('landing')" style="color:var(--text-dim)"><span class="s-icon">🏠</span><span>Home</span></button>
   <button class="sidebar-link" onclick="logout()" style="color:var(--danger)"><span class="s-icon">🚪</span><span>Logout</span></button>
   </aside>`;
             return h;
@@ -2128,14 +2137,6 @@
       <button class="btn btn-primary btn-lg" onclick="navigate('register')">✍️ Register as a Beneficiary</button>
       <button class="btn btn-secondary btn-lg" onclick="navigate('login')">🔐 Sign In</button>
     </div>
-    <div class="divider" style="max-width:500px;margin:30px auto"></div>
-    <details style="max-width:520px;margin:0 auto;text-align:left">
-      <summary style="cursor:pointer;font-size:12px;color:var(--text-dim);text-align:center;list-style:none">🔬 Evaluator / demo access (pre-configured test accounts)</summary>
-      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px">
-        ${[['👨‍🌾 Beneficiary', 'me@gmail.com', '123456'], ['🔍 Field Officer', 'fo@gmail.com', '123456'], ['📋 District Officer', 'd0@gmail.com', '123456'], ['💰 Finance', 'fa@gmail.com', '123456'], ['⚙️ Admin', 'admin@gmail.com', '123456']].map(d => `<button class="btn btn-ghost btn-sm" style="border:1px solid var(--border);font-size:11px" onclick="quickLogin('${d[1]}','${d[2]}')">${d[0]}</button>`).join('')}
-      </div>
-      <p class="text-xs text-dim" style="margin-top:8px;text-align:center">For evaluation only — these buttons log in instantly with pre-seeded test accounts.</p>
-    </details>
   </div></section>
 
   <footer style="background:var(--bg-card);border-top:1px solid var(--border);padding:28px 0">
@@ -2154,27 +2155,25 @@
                 holder.innerHTML = `<div class="empty-state" style="grid-column:1/-1;padding:40px"><p class="text-sm text-muted">Couldn't load schemes right now — you can still register and check eligibility after signing in.</p></div>`;
                 return;
             }
-            const schemes = (res.data || []).filter(s => s.isActive);
-            if (schemes.length === 0) {
-                holder.innerHTML = `<div class="empty-state" style="grid-column:1/-1;padding:40px"><p class="text-sm text-muted">No active schemes right now — check back soon.</p></div>`;
+            const active = (res.data || []).filter(s => s.active);
+            if (!active.length) {
+                holder.innerHTML = `<div class="empty-state" style="grid-column:1/-1;padding:40px"><p class="text-sm text-muted">No active schemes currently listed. Check back soon.</p></div>`;
                 return;
             }
-            holder.innerHTML = schemes.map(s => `
-        <div class="card" style="display:flex;flex-direction:column;height:100%">
-          <div style="font-size:16px;font-weight:800;margin-bottom:8px;line-height:1.35">${s.name}</div>
-          <p class="text-sm text-muted" style="margin-bottom:16px;line-height:1.6;font-size:12.5px;flex:1">${(s.description || '').slice(0, 130)}${(s.description || '').length > 130 ? '...' : ''}</p>
+            holder.innerHTML = active.map(s => `
+        <div class="scheme-card" style="padding:22px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+            <span class="badge badge-success">Active</span>
+            <span style="font-size:12px;font-weight:700;color:var(--primary-light)">ID #${s.id}</span>
+          </div>
+          <h3 style="font-size:16px;font-weight:800;margin-bottom:8px">${s.name}</h3>
+          <p class="text-sm text-muted" style="margin-bottom:16px;line-height:1.5">${s.description || 'Government financial support scheme'}</p>
           <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;font-size:12px">
             ${s.maxIncome != null ? `<div style="display:flex;justify-content:space-between"><span class="text-muted">Max annual income:</span><strong>${fmtINR(Number(s.maxIncome))}</strong></div>` : ''}
             ${s.allowedCategories ? `<div style="display:flex;justify-content:space-between"><span class="text-muted">Categories:</span><strong>${s.allowedCategories}</strong></div>` : ''}
           </div>
           <button class="btn btn-primary btn-sm" style="width:100%" onclick="navigate('register')">Apply Now →</button>
         </div>`).join('');
-        }
-
-        async function quickLogin(email, pw) {
-            const r = await login(email, pw);
-            if (r.success) { showToast('Welcome, ' + r.user.name + '! 👋', 'success'); _history = []; navigate(dashPage(r.user.role)); }
-            else showToast(r.error || 'Login failed', 'error');
         }
 
         /* ================================================================
@@ -2184,7 +2183,7 @@
             container.innerHTML = `
   <div class="auth-page"><div class="auth-bg"></div>
   <div class="auth-card">
-    <div style="margin-bottom:20px">${backBtn('← Back to Home')}</div>
+    <div style="margin-bottom:20px">${homeBtn('← Back to Home')}</div>
     <div class="auth-logo"><div class="logo-icon">🏛️</div><div><div class="logo-text">GovGrant Portal</div><div class="logo-sub">Secure Government Access</div></div></div>
     <h1 class="auth-title">Sign In</h1>
     <p class="auth-sub">Use your registered email and password to access your dashboard</p>
@@ -2206,25 +2205,7 @@
       <button class="btn btn-primary btn-lg" type="submit" id="l-btn" style="width:100%;margin-top:4px">🔐 Sign In to Dashboard</button>
     </form>
     <div class="auth-link">New to GovGrant? <a onclick="navigate('register')">Create Account →</a></div>
-
-    <div class="divider"></div>
-    <details style="cursor:pointer">
-      <summary class="text-sm text-muted" style="list-style:none;display:flex;align-items:center;gap:6px;font-weight:600">🔬 Show Demo Credentials <span style="font-size:10px">(click to expand)</span></summary>
-      <div style="font-size:11px;color:var(--text-dim);margin-top:10px">These now hit the real backend. Officer/Admin rows only work after running <code>seed-officer-accounts.sql</code>; the Beneficiary row only works if you've registered that exact account yourself.</div>
-      <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
-        ${[['👨‍🌾 Beneficiary (register this first)', 'ramesh@example.com', 'pass123'], ['🔍 Field Officer', 'fo@govgrant.in', 'fo123'], ['📋 District Officer', 'do@govgrant.in', 'do123'], ['💰 Finance Approver', 'fa@govgrant.in', 'fa123'], ['⚙️ Admin', 'admin@govgrant.in', 'admin123']].map(d => `
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--bg-surface);border-radius:9px;border:1px solid var(--border)">
-            <div><div style="font-size:12px;font-weight:700">${d[0]}</div><div style="font-size:11px;color:var(--text-dim)">${d[1]} / ${d[2]}</div></div>
-            <button class="btn btn-primary btn-sm" onclick="fillAndLogin('${d[1]}','${d[2]}')">Use →</button>
-          </div>`).join('')}
-      </div>
-    </details>
   </div></div>`;
-        }
-        function fillAndLogin(email, pw) {
-            document.getElementById('l-email').value = email;
-            document.getElementById('l-pass').value = pw;
-            handleLogin({ preventDefault: () => { } });
         }
         async function handleLogin(ev) {
             if (ev && ev.preventDefault) ev.preventDefault();
@@ -2243,7 +2224,7 @@
             container.innerHTML = `
   <div class="auth-page" style="align-items:flex-start;padding-top:40px"><div class="auth-bg"></div>
   <div class="auth-card auth-card-wide">
-    <div style="margin-bottom:20px">${backBtn('← Back to Home')}</div>
+    <div style="margin-bottom:20px">${homeBtn('← Back to Home')}</div>
     <div class="auth-logo"><div class="logo-icon">🏛️</div><div><div class="logo-text">GovGrant Portal</div><div class="logo-sub">Create Your Account</div></div></div>
     <h1 class="auth-title">Register</h1>
     <p class="auth-sub">Fill in your details to create your account. After registering, you can sign in to access the portal.</p>
@@ -2457,7 +2438,9 @@
                 if (!aadhaar || aadhaar.length < 12) { err.innerHTML = '⚠️ Enter valid 12-digit Aadhaar number.'; err.style.display = 'flex'; return; }
                 if (!cat) { err.innerHTML = '⚠️ Please select your category.'; err.style.display = 'flex'; return; }
                 Object.assign(data, { aadhaar, category: cat, incomePerAnnum: income });
-                try { sessionStorage.setItem('pending_reg_profile', JSON.stringify(data)); } catch(e) {}
+                const safeData = { ...data };
+                delete safeData.password;
+                try { sessionStorage.setItem('pending_reg_profile', JSON.stringify(safeData)); } catch(e) {}
                 btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Creating Account...';
                 const r = await register(data);
                 if (r.success) {
@@ -2465,7 +2448,10 @@
                     _history = [];
                     navigate(dashPage(r.user.role));
                 }
-                else { btn.disabled = false; btn.innerHTML = '✍️ Create My Account'; err.innerHTML = '⚠️ ' + r.error; err.style.display = 'flex'; }
+                else {
+                    btn.disabled = false; btn.innerHTML = '✍️ Create My Account'; err.innerHTML = '⚠️ ' + r.error; err.style.display = 'flex';
+                    try { sessionStorage.removeItem('pending_reg_profile'); } catch(e) {}
+                }
             } else {
                 const roleEnumMap = {
                     field_officer: 'FIELD_OFFICER',
@@ -3077,6 +3063,9 @@
 
         /** Fetches applications in a given status, enriches with beneficiary info, filters to the officer's region. */
         async function foLoadRegionalApps(status, officer) {
+            if (!officer || !officer.region) {
+                return { success: true, data: [], noRegion: true };
+            }
             const res = await apiFetch(`/api/v1/applications/status/${status}`);
             if (!res.success) return { success: false, error: res.error };
             const apps = res.data;
@@ -3084,15 +3073,8 @@
                 const br = await apiFetch(`/api/v1/beneficiaries/${app.beneficiaryId}`);
                 return { ...app, beneficiary: br.success ? br.data : null };
             }));
-            const mine = officer.region ? enriched.filter(a => a.beneficiary && a.beneficiary.region === officer.region) : enriched;
+            const mine = enriched.filter(a => a.beneficiary && a.beneficiary.region === officer.region);
             return { success: true, data: mine };
-        }
-
-        async function foResumeVerification(appId) {
-            const res = await apiFetch(`/api/v1/applications/${appId}/resume-verification`, { method: 'PATCH' });
-            if (!res.success) { showToast(res.error, 'error'); return; }
-            showToast(`Application #${appId} verification resumed.`, 'success');
-            navigate('field_officer', 'queue');
         }
 
         /* ================================================================
@@ -3103,6 +3085,10 @@
         ================================================================ */
         async function officerCompliance(m, user, officer, roleKey) {
             m.innerHTML = '<div class="empty-state"><span class="loading-spinner"></span></div>';
+            if (!officer || !officer.region) {
+                m.innerHTML = `<div class="card"><div class="alert alert-danger"><span class="alert-icon">⚠️</span><div><strong>No Assigned Region</strong><br>Your account has no assigned region. Please contact an administrator.</div></div></div>`;
+                return;
+            }
             const [r1, r2] = await Promise.all([
                 foLoadRegionalApps('READY_FOR_DISBURSEMENT', officer),
                 foLoadRegionalApps('DISBURSED', officer)
@@ -3110,7 +3096,7 @@
             const apps = [...(r1.success ? r1.data : []), ...(r2.success ? r2.data : [])];
             m.innerHTML = `
   <div class="dash-header">
-    <div><h2>Stage Compliance 🔍</h2><p>Verify utilization proofs and complete disbursement milestones · ${officer.region || 'All Regions'}</p></div>
+    <div><h2>Stage Compliance 🔍</h2><p>Verify utilization proofs and complete disbursement milestones · ${officer.region || 'Unassigned'}</p></div>
     <div class="text-sm text-muted" style="text-align:right"><div style="font-size:22px;font-weight:800;color:var(--primary-light)">${apps.length}</div><div>In Disbursement</div></div>
   </div>
   ${apps.length === 0 ? '<div class="card"><div class="empty-state"><div class="e-icon">📭</div><h3>No applications in disbursement</h3><p>Applications appear here once Finance releases their first stage.</p></div></div>' : '<div id="oc-cards" style="display:flex;flex-direction:column;gap:16px"></div>'}`;
@@ -3169,6 +3155,10 @@
 
         async function foQueue(m, user, officer) {
             m.innerHTML = '<div class="empty-state"><span class="loading-spinner"></span></div>';
+            if (!officer || !officer.region) {
+                m.innerHTML = `<div class="card"><div class="alert alert-danger"><span class="alert-icon">⚠️</span><div><strong>No Assigned Region</strong><br>Your account has no assigned region. Please contact an administrator to assign a region to your account.</div></div></div>`;
+                return;
+            }
             const [r1, r2] = await Promise.all([
                 foLoadRegionalApps('FIELD_VERIFICATION_PENDING', officer),
                 foLoadRegionalApps('RE_VERIFICATION_REQUIRED', officer)
@@ -3177,7 +3167,7 @@
             const queue = [...(r1.success ? r1.data : []), ...(r2.success ? r2.data : [])];
             m.innerHTML = `
   <div class="dash-header">
-    <div><h2>Verification Queue 🔍</h2><p>Applications requiring ground-level verification · ${officer.region || 'All Regions'}</p></div>
+    <div><h2>Verification Queue 🔍</h2><p>Applications requiring ground-level verification · ${officer.region || 'Unassigned'}</p></div>
     <div class="text-sm text-muted" style="text-align:right"><div style="font-size:22px;font-weight:800;color:var(--warning)">${queue.length}</div><div>Pending</div></div>
   </div>
   <div class="card" style="margin-bottom:18px">
@@ -3208,10 +3198,8 @@
           <span class="alert-icon">🔁</span>
           <div><strong>Re-verification requested by District Officer:</strong><br><span style="font-size:12px">${app.remarks || 'Please re-verify ground conditions and submitted proofs.'}</span></div>
         </div>
-        <button class="btn btn-primary btn-lg" onclick="foResumeVerification(${app.id})" style="width:100%">🔄 Resume Verification</button>
-      ` : `
-        <button class="btn btn-warning btn-lg" onclick="openVerifyModal(${app.id})" style="width:100%">🔍 Review & Start Ground Verification →</button>
-      `}
+      ` : ''}
+      <button class="btn btn-warning btn-lg" onclick="openVerifyModal(${app.id})" style="width:100%">🔍 Review & Start Ground Verification →</button>
     </div>`).join('')}`}`;
         }
 
@@ -3373,12 +3361,16 @@
 
         async function doReview(m, user, officer) {
             m.innerHTML = '<div class="empty-state"><span class="loading-spinner"></span></div>';
+            if (!officer || !officer.region) {
+                m.innerHTML = `<div class="card"><div class="alert alert-danger"><span class="alert-icon">⚠️</span><div><strong>No Assigned Region</strong><br>Your account has no assigned region. Please contact an administrator to assign a region to your account.</div></div></div>`;
+                return;
+            }
             const r = await foLoadRegionalApps('DISTRICT_REVIEW_PENDING', officer);
             if (!r.success) { m.innerHTML = `<div class="alert alert-danger">⚠️ ${r.error}</div>`; return; }
             const pending = r.data;
             m.innerHTML = `
   <div class="dash-header">
-    <div><h2>Applications Pending Review 📋</h2><p>Review field verification reports and make approval decisions · ${officer.region || 'All Regions'}</p></div>
+    <div><h2>Applications Pending Review 📋</h2><p>Review field verification reports and make approval decisions · ${officer.region}</p></div>
     <div class="text-sm text-muted" style="text-align:right"><div style="font-size:22px;font-weight:800;color:var(--primary-light)">${pending.length}</div><div>Awaiting Decision</div></div>
   </div>
   <div class="card" style="margin-bottom:18px">

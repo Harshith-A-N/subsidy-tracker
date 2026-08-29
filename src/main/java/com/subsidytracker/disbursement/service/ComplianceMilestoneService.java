@@ -1,6 +1,5 @@
 package com.subsidytracker.disbursement.service;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -34,7 +33,6 @@ import com.subsidytracker.disbursement.repository.DisbursementMilestoneRepositor
 import com.subsidytracker.eligibility.repository.ApplicationRepository;
 import com.subsidytracker.eligibility.repository.DocumentRepository;
 import com.subsidytracker.eligibility.repository.UserRepository;
-import com.subsidytracker.scheme.repository.RegionalBudgetRepository;
 import com.subsidytracker.common.service.AuditLogService;
 
 @Service
@@ -45,7 +43,6 @@ public class ComplianceMilestoneService {
     private final DisbursementMilestoneRepository milestoneRepository;
     private final ApplicationDisbursementScheduleRepository scheduleRepository;
     private final ApplicationRepository applicationRepository;
-    private final RegionalBudgetRepository regionalBudgetRepository;
     private final UserRepository userRepository;
     private final DocumentRepository documentRepository;
     private final AuditLogService auditLogService;
@@ -54,7 +51,6 @@ public class ComplianceMilestoneService {
             DisbursementMilestoneRepository milestoneRepository,
             ApplicationDisbursementScheduleRepository scheduleRepository,
             ApplicationRepository applicationRepository,
-            RegionalBudgetRepository regionalBudgetRepository,
             UserRepository userRepository,
             DocumentRepository documentRepository,
             AuditLogService auditLogService) {
@@ -62,7 +58,6 @@ public class ComplianceMilestoneService {
         this.milestoneRepository = milestoneRepository;
         this.scheduleRepository = scheduleRepository;
         this.applicationRepository = applicationRepository;
-        this.regionalBudgetRepository = regionalBudgetRepository;
         this.userRepository = userRepository;
         this.documentRepository = documentRepository;
         this.auditLogService = auditLogService;
