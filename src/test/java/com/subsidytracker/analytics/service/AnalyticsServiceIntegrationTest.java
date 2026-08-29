@@ -96,16 +96,12 @@ public class AnalyticsServiceIntegrationTest {
         scheme1 = new Scheme();
         scheme1.setName("Solar Pump Subsidy");
         scheme1.setDescription("Solar pump subsidy scheme");
-        scheme1.setTotalBudget(new BigDecimal("20000000.00"));
-        scheme1.setGrantAmount(new BigDecimal("100000.00"));
         scheme1.setActive(true);
         entityManager.persist(scheme1);
 
         scheme2 = new Scheme();
         scheme2.setName("Rural Housing Grant");
         scheme2.setDescription("Rural housing grant scheme");
-        scheme2.setTotalBudget(new BigDecimal("18000000.00"));
-        scheme2.setGrantAmount(new BigDecimal("150000.00"));
         scheme2.setActive(true);
         entityManager.persist(scheme2);
 

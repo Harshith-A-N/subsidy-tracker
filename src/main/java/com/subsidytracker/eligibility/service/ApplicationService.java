@@ -15,6 +15,10 @@ import com.subsidytracker.eligibility.repository.ApplicationRepository;
 import com.subsidytracker.eligibility.repository.UserRepository;
 import com.subsidytracker.beneficiary.repository.BeneficiaryRepository;
 import com.subsidytracker.scheme.repository.SchemeRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +27,8 @@ import java.util.List;
 
 @Service
 public class ApplicationService {
+
+    private static final Logger logger = LoggerFactory.getLogger(ApplicationService.class);
 
     private final ApplicationRepository applicationRepository;
     private final BeneficiaryRepository beneficiaryRepository;
@@ -129,7 +135,8 @@ public class ApplicationService {
                     submittingUser,
                     "Application submitted for eligibility evaluation. New status: " + response.getStatus());
         } catch (Exception e) {
-            // Audit log failure must not prevent primary operation success
+            logger.warn("Failed to log audit event [entityType=Application, entityId={}, action=SUBMITTED]: {}",
+                    application.getId(), e.getMessage(), e);
         }
 
         return response;
@@ -160,8 +167,16 @@ public class ApplicationService {
         return applicationRepository.findAll().stream().map(this::toDto).toList();
     }
 
+    public Page<ApplicationResponseDto> getAllApplications(Pageable pageable) {
+        return applicationRepository.findAll(pageable).map(this::toDto);
+    }
+
     public List<ApplicationResponseDto> getApplicationsByStatus(ApplicationStatus status) {
         return applicationRepository.findByStatus(status).stream().map(this::toDto).toList();
+    }
+
+    public Page<ApplicationResponseDto> getApplicationsByStatus(ApplicationStatus status, Pageable pageable) {
+        return applicationRepository.findByStatus(status, pageable).map(this::toDto);
     }
 
     /**
@@ -174,6 +189,14 @@ public class ApplicationService {
 
         return applicationRepository.findByBeneficiaryId(beneficiary.getId())
                 .stream().map(this::toDto).toList();
+    }
+
+    public Page<ApplicationResponseDto> getMyApplications(long currentUserId, Pageable pageable) {
+        Beneficiary beneficiary = beneficiaryRepository.findByUserId(currentUserId)
+                .orElseThrow(() -> new InvalidOperationException(
+                        "No beneficiary profile found for current user."));
+
+        return applicationRepository.findByBeneficiaryId(beneficiary.getId(), pageable).map(this::toDto);
     }
 
     private Application findOrThrow(Long id) {

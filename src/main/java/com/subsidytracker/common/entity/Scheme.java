@@ -41,19 +41,4 @@ public class Scheme {
 
     @Column(name = "required_documents", length = 1000)
     private String requiredDocuments; // comma-separated list, e.g. "AADHAR,INCOME_CERTIFICATE,ADDRESS_PROOF"
-
-    // NOTE: not exposed via SchemeRequestDto/SchemeService — grant amounts are
-    // driven entirely by SchemeSlab (per beneficiary category) everywhere in
-    // the codebase. This column is dead; kept nullable rather than dropped to
-    // avoid an unnecessary schema change. Do not wire this up — use SchemeSlab.
-    @Column(name = "grant_amount", precision = 15, scale = 2)
-    private BigDecimal grantAmount = BigDecimal.ZERO;
-
-    // NOTE: also not exposed via any DTO. Was previously NOT NULL, which silently
-    // broke scheme creation (every INSERT failed with a constraint violation,
-    // since nothing ever set it). Scheme-level budget totals are now derived from
-    // summing RegionalBudget rows in AnalyticsRepository.getSchemeUtilizations()
-    // instead of relying on this column.
-    @Column(name = "total_budget", precision = 15, scale = 2)
-    private BigDecimal totalBudget = BigDecimal.ZERO;
 }

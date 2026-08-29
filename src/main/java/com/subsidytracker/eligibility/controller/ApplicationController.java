@@ -6,6 +6,8 @@ import com.subsidytracker.eligibility.dto.ApplicationRequestDto;
 import com.subsidytracker.eligibility.dto.ApplicationResponseDto;
 import com.subsidytracker.eligibility.repository.UserRepository;
 import com.subsidytracker.eligibility.service.ApplicationService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -38,9 +40,12 @@ public class ApplicationController {
      * Returns only applications belonging to the authenticated beneficiary.
      */
     @GetMapping("/my-applications")
-    public ResponseEntity<List<ApplicationResponseDto>> getMyApplications(Authentication authentication) {
+    public ResponseEntity<Page<ApplicationResponseDto>> getMyApplications(
+            Authentication authentication,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         long userId = resolveUserId(authentication);
-        return ResponseEntity.ok(applicationService.getMyApplications(userId));
+        return ResponseEntity.ok(applicationService.getMyApplications(userId, PageRequest.of(page, size)));
     }
 
     /**
@@ -68,13 +73,18 @@ public class ApplicationController {
     }
 
     @GetMapping
-    public ResponseEntity<List<ApplicationResponseDto>> getAll() {
-        return ResponseEntity.ok(applicationService.getAllApplications());
+    public ResponseEntity<Page<ApplicationResponseDto>> getAll(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(applicationService.getAllApplications(PageRequest.of(page, size)));
     }
 
     @GetMapping("/status/{status}")
-    public ResponseEntity<List<ApplicationResponseDto>> getByStatus(@PathVariable ApplicationStatus status) {
-        return ResponseEntity.ok(applicationService.getApplicationsByStatus(status));
+    public ResponseEntity<Page<ApplicationResponseDto>> getByStatus(
+            @PathVariable ApplicationStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(applicationService.getApplicationsByStatus(status, PageRequest.of(page, size)));
     }
 
     /**

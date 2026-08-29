@@ -30,11 +30,6 @@ public class VerificationController {
         return ResponseEntity.ok(verificationService.processVerification(applicationId, request, officerId));
     }
 
-    @PatchMapping("/{applicationId}/resume-verification")
-    public ResponseEntity<VerificationResponseDto> resume(@PathVariable Long applicationId) {
-        return ResponseEntity.ok(verificationService.resumeAfterReVerification(applicationId));
-    }
-
     /**
      * Resolves the current user's database ID from the Authentication principal.
      * The principal name is the email (set by CustomUserDetailsService).

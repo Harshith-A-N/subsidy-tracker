@@ -5,6 +5,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -35,6 +39,8 @@ import com.subsidytracker.common.service.AuditLogService;
 
 @Service
 public class ComplianceMilestoneService {
+
+    private static final Logger logger = LoggerFactory.getLogger(ComplianceMilestoneService.class);
 
     private final DisbursementMilestoneRepository milestoneRepository;
     private final ApplicationDisbursementScheduleRepository scheduleRepository;
@@ -213,7 +219,8 @@ public class ComplianceMilestoneService {
                     milestone.getCompletedBy(),
                     "Completed milestone " + milestone.getMilestoneType() + " for stage " + milestone.getStage().getStageName());
         } catch (Exception e) {
-            // Audit log failure must not prevent primary operation success
+            logger.warn("Failed to log audit event [entityType=DisbursementMilestone, entityId={}, action=MILESTONE_COMPLETED]: {}",
+                    milestone.getId(), e.getMessage(), e);
         }
 
         return saved;
@@ -266,12 +273,22 @@ public class ComplianceMilestoneService {
                 ComplianceStatus.PENDING);
     }
 
+    public Page<DisbursementMilestone> getPendingMilestones(Pageable pageable) {
+        return milestoneRepository.findByComplianceStatus(
+                ComplianceStatus.PENDING, pageable);
+    }
+
     /**
      * Returns overdue milestones.
      */
     public List<DisbursementMilestone> getOverdueMilestones() {
         return milestoneRepository.findByComplianceStatus(
                 ComplianceStatus.OVERDUE);
+    }
+
+    public Page<DisbursementMilestone> getOverdueMilestones(Pageable pageable) {
+        return milestoneRepository.findByComplianceStatus(
+                ComplianceStatus.OVERDUE, pageable);
     }
 
     /**
@@ -282,6 +299,13 @@ public class ComplianceMilestoneService {
 
         return milestoneRepository
                 .findByApplicationIdOrderBySequenceOrderAsc(applicationId);
+    }
+
+    public Page<DisbursementMilestone> getApplicationMilestones(
+            Long applicationId, Pageable pageable) {
+
+        return milestoneRepository
+                .findByApplicationIdOrderBySequenceOrderAsc(applicationId, pageable);
     }
 
     /**
@@ -314,7 +338,8 @@ public class ComplianceMilestoneService {
                         "Milestone " + milestone.getId() + " for application "
                                 + milestone.getApplication().getId() + " is overdue.");
             } catch (Exception e) {
-                // Audit log failure must not prevent primary operation success
+                logger.warn("Failed to log audit event [entityType=DisbursementMilestone, entityId={}, action=MILESTONE_OVERDUE]: {}",
+                        milestone.getId(), e.getMessage(), e);
             }
 
             System.out.println(

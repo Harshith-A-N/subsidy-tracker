@@ -5,6 +5,8 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +35,8 @@ import com.subsidytracker.common.enums.DocumentVerificationStatus;
 
 @Service
 public class VerificationService {
+
+    private static final Logger logger = LoggerFactory.getLogger(VerificationService.class);
 
     // ---- Routing policy thresholds ----
     // Applications with a high eligibility score AND a low grant amount
@@ -150,7 +154,8 @@ public class VerificationService {
                     officer,
                     "Verification decision " + request.getDecision() + " at " + level + " level. New status: " + newStatus);
         } catch (Exception e) {
-            // Audit log failure must not prevent primary operation success
+            logger.warn("Failed to log audit event [entityType=Application, entityId={}, action={}, user={}]: {}",
+                    application.getId(), request.getDecision().name(), officer != null ? officer.getEmail() : "null", e.getMessage(), e);
         }
 
         VerificationResponseDto response =
@@ -163,90 +168,6 @@ public class VerificationService {
                 "Verification recorded at "
                         + level
                         + " level.");
-
-        return response;
-    }
-
-    @Transactional
-    public VerificationResponseDto resumeAfterReVerification(
-            Long applicationId) {
-
-        Application application =
-                applicationRepository.findById(applicationId)
-                        .orElseThrow(() ->
-                                new ResourceNotFoundException(
-                                        "Application",
-                                        applicationId));
-
-        if (application.getStatus()
-                != ApplicationStatus.RE_VERIFICATION_REQUIRED) {
-
-            throw new InvalidOperationException(
-                    "Application is not awaiting re-verification. "
-                            + "Current status: "
-                            + application.getStatus());
-        }
-
-        Verification lastAction =
-                verificationRepository
-                        .findTopByApplicationIdOrderByVerificationDateDesc(
-                                applicationId)
-                        .orElseThrow(() ->
-                                new InvalidOperationException(
-                                        "No prior verification history found "
-                                                + "- cannot determine which "
-                                                + "stage to resume at."));
-
-        ApplicationStatus resumeStatus;
-
-        if (lastAction.getLevel()
-                == VerificationLevel.FIELD) {
-
-            resumeStatus =
-                    ApplicationStatus.FIELD_VERIFICATION_PENDING;
-
-        } else if (lastAction.getLevel()
-                == VerificationLevel.DISTRICT) {
-
-            resumeStatus =
-                    ApplicationStatus.DISTRICT_REVIEW_PENDING;
-
-        } else if (lastAction.getLevel()
-                == VerificationLevel.FINANCE) {
-
-            resumeStatus =
-                    ApplicationStatus.FINANCE_REVIEW_PENDING;
-
-        } else {
-
-            throw new InvalidOperationException(
-                    "Unsupported verification level: "
-                            + lastAction.getLevel());
-        }
-
-        application.setStatus(resumeStatus);
-        applicationRepository.save(application);
-
-        try {
-            auditLogService.logEvent(
-                    "Application",
-                    application.getId(),
-                    "RESUMED_VERIFICATION",
-                    (User) null,
-                    "Application resumed at " + lastAction.getLevel() + " level after re-verification. New status: " + resumeStatus);
-        } catch (Exception e) {
-            // Audit log failure must not prevent primary operation success
-        }
-
-        VerificationResponseDto response =
-                new VerificationResponseDto();
-
-        response.setApplicationId(application.getId());
-        response.setNewStatus(resumeStatus);
-        response.setMessage(
-                "Application resumed at "
-                        + lastAction.getLevel()
-                        + " level after re-verification.");
 
         return response;
     }

@@ -57,8 +57,16 @@ public class SchemeService {
         return schemeRepository.findAll().stream().map(this::toDto).toList();
     }
 
+    public org.springframework.data.domain.Page<SchemeResponseDto> getAllSchemes(org.springframework.data.domain.Pageable pageable) {
+        return schemeRepository.findAll(pageable).map(this::toDto);
+    }
+
     public List<SchemeResponseDto> getActiveSchemes() {
         return schemeRepository.findByIsActiveTrue().stream().map(this::toDto).toList();
+    }
+
+    public org.springframework.data.domain.Page<SchemeResponseDto> getActiveSchemes(org.springframework.data.domain.Pageable pageable) {
+        return schemeRepository.findByIsActiveTrue(pageable).map(this::toDto);
     }
 
     @Transactional

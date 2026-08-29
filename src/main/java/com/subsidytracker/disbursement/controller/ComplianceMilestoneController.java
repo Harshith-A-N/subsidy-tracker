@@ -2,6 +2,8 @@ package com.subsidytracker.disbursement.controller;
 
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -10,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.subsidytracker.common.entity.Application;
@@ -72,17 +75,21 @@ public class ComplianceMilestoneController {
     }
 
     @GetMapping("/pending")
-    public ResponseEntity<List<DisbursementMilestone>> getPendingMilestones() {
+    public ResponseEntity<Page<DisbursementMilestone>> getPendingMilestones(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
 
         return ResponseEntity.ok(
-                complianceMilestoneService.getPendingMilestones());
+                complianceMilestoneService.getPendingMilestones(PageRequest.of(page, size)));
     }
 
     @GetMapping("/overdue")
-    public ResponseEntity<List<DisbursementMilestone>> getOverdueMilestones() {
+    public ResponseEntity<Page<DisbursementMilestone>> getOverdueMilestones(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
 
         return ResponseEntity.ok(
-                complianceMilestoneService.getOverdueMilestones());
+                complianceMilestoneService.getOverdueMilestones(PageRequest.of(page, size)));
     }
 
     // ---------- Auth Helper ----------

@@ -5,6 +5,8 @@ import com.subsidytracker.beneficiary.dto.BeneficiaryResponseDto;
 import com.subsidytracker.beneficiary.service.BeneficiaryService;
 import com.subsidytracker.common.entity.User;
 import com.subsidytracker.eligibility.repository.UserRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -48,8 +50,10 @@ public class BeneficiaryController {
     }
 
     @GetMapping
-    public ResponseEntity<List<BeneficiaryResponseDto>> getAll() {
-        return ResponseEntity.ok(beneficiaryService.getAllBeneficiaries());
+    public ResponseEntity<Page<BeneficiaryResponseDto>> getAll(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(beneficiaryService.getAllBeneficiaries(PageRequest.of(page, size)));
     }
 
     @PutMapping("/{id}")

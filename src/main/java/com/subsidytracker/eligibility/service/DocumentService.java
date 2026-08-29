@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -34,6 +36,8 @@ import com.subsidytracker.eligibility.repository.UserRepository;
 
 @Service
 public class DocumentService {
+
+    private static final Logger logger = LoggerFactory.getLogger(DocumentService.class);
 
     // Statuses that permit document uploads from the owning beneficiary
     private static final Set<ApplicationStatus> UPLOAD_ALLOWED_STATUSES = Set.of(
@@ -221,7 +225,8 @@ public class DocumentService {
                     "Set verification status " + status + " for document type '" + saved.getDocumentType()
                             + "' on application id: " + applicationId);
         } catch (Exception e) {
-            // Audit log failure must not prevent primary operation success
+            logger.warn("Failed to log audit event [entityType=Document, entityId={}, action=DOCUMENT_{}]: {}",
+                    saved.getId(), status.name(), e.getMessage(), e);
         }
 
         return toDto(saved);
