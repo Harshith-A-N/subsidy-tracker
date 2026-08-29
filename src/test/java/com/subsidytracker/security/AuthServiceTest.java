@@ -130,4 +130,48 @@ class AuthServiceTest {
 
         verify(jwtService, never()).generateToken(anyString(), anyString());
     }
+
+    @Test
+    void login_RoleMismatch_ShouldThrowInvalidOperationException() {
+        LoginRequestDto loginRequest = new LoginRequestDto();
+        loginRequest.setEmail("user@example.com");
+        loginRequest.setPassword("secret123");
+        loginRequest.setRole(Role.ADMIN); // Requested ADMIN, but user is BENEFICIARY
+
+        User user = new User();
+        user.setId(10L);
+        user.setEmail("user@example.com");
+        user.setFullName("Test User");
+        user.setRole(Role.BENEFICIARY);
+
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.login(loginRequest))
+                .isInstanceOf(com.subsidytracker.common.exception.InvalidOperationException.class)
+                .hasMessageContaining("role mismatch");
+
+        verify(jwtService, never()).generateToken(anyString(), anyString());
+    }
+
+    @Test
+    void login_MatchingRole_ShouldSucceed() {
+        LoginRequestDto loginRequest = new LoginRequestDto();
+        loginRequest.setEmail("user@example.com");
+        loginRequest.setPassword("secret123");
+        loginRequest.setRole(Role.BENEFICIARY);
+
+        User user = new User();
+        user.setId(10L);
+        user.setEmail("user@example.com");
+        user.setFullName("Test User");
+        user.setRole(Role.BENEFICIARY);
+
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+        when(jwtService.generateToken("user@example.com", "BENEFICIARY")).thenReturn("mocked.jwt.token");
+
+        AuthResponseDto response = authService.login(loginRequest);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getRole()).isEqualTo(Role.BENEFICIARY);
+    }
 }

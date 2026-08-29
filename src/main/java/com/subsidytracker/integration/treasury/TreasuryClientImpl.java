@@ -13,7 +13,7 @@ public class TreasuryClientImpl implements TreasuryClient {
     private final RestClient restClient;
 
     public TreasuryClientImpl(RestClient.Builder restClientBuilder,
-                              @Value("${treasury.mock.base-url}") String baseUrl) {
+                              @Value("${treasury.mock.base-url:http://localhost:8080/mock/external-treasury}") String baseUrl) {
         this.restClient = restClientBuilder
                 .baseUrl(baseUrl)
                 .build();

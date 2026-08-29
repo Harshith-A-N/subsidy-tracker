@@ -87,6 +87,10 @@ public class AuthService {
                 .orElseThrow(() -> new InvalidOperationException(
                         "User not found after successful authentication."));
 
+        if (request.getRole() != null && user.getRole() != request.getRole()) {
+            throw new InvalidOperationException("Invalid credentials: role mismatch for this account.");
+        }
+
         String token = jwtService.generateToken(user.getEmail(), user.getRole().name());
 
         return new AuthResponseDto(
