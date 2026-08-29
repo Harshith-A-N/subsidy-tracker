@@ -1841,6 +1841,21 @@
             if (!r.success || !r.data) return { success: false, error: r.error || 'Login failed. Please verify backend server is running.' };
             const d = r.data;
             if (!d || !d.token) return { success: false, error: 'Invalid response format from server.' };
+
+            // Robust role verification: Ensure the chosen role strictly matches the account role
+            if (role) {
+                const expected = normalizeRole(role);
+                const actual = normalizeRole(d.role);
+                if (expected && actual && expected !== actual) {
+                    clearToken();
+                    sessionStorage.removeItem(AUTH_KEY);
+                    return {
+                        success: false,
+                        error: 'Role mismatch: You selected ' + getRoleLabel(expected) + ', but this account is registered as ' + getRoleLabel(actual) + '.'
+                    };
+                }
+            }
+
             setToken(d.token);
             const user = { id: d.userId, name: d.fullName, email: d.email, role: normalizeRole(d.role), avatar: (d.fullName || '?').charAt(0).toUpperCase() };
             setCurrentUser(user);
