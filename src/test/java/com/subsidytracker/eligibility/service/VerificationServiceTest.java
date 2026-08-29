@@ -27,7 +27,6 @@ import com.subsidytracker.common.enums.ApplicationStatus;
 import com.subsidytracker.common.enums.DocumentVerificationStatus;
 import com.subsidytracker.common.enums.Role;
 import com.subsidytracker.common.enums.VerificationDecision;
-import com.subsidytracker.common.enums.VerificationLevel;
 import com.subsidytracker.common.exception.InvalidOperationException;
 import com.subsidytracker.common.service.AuditLogService;
 import com.subsidytracker.disbursement.service.ScheduleGenerationService;

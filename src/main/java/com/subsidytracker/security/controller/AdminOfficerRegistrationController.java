@@ -6,7 +6,6 @@ import com.subsidytracker.security.dto.OfficerRegistrationResponseDto;
 import com.subsidytracker.security.dto.OfficerRejectRequestDto;
 import com.subsidytracker.security.service.OfficerRegistrationService;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
