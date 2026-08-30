@@ -309,18 +309,26 @@ public class DocumentService {
                 validateOfficerDocumentAccess(application, currentUser,
                         Set.of(ApplicationStatus.FIELD_VERIFICATION_PENDING,
                                 ApplicationStatus.READY_FOR_DISBURSEMENT,
-                                ApplicationStatus.DISBURSED));
+                                ApplicationStatus.DISBURSED,
+                                ApplicationStatus.COMPLETED));
                 break;
             case DISTRICT_OFFICER:
                 validateOfficerDocumentAccess(application, currentUser,
                         Set.of(ApplicationStatus.DISTRICT_REVIEW_PENDING,
                                 ApplicationStatus.READY_FOR_DISBURSEMENT,
-                                ApplicationStatus.DISBURSED));
+                                ApplicationStatus.DISBURSED,
+                                ApplicationStatus.COMPLETED));
                 break;
             case FINANCE_APPROVER:
-                if (application.getStatus() != ApplicationStatus.FINANCE_REVIEW_PENDING) {
+                Set<ApplicationStatus> allowedFinance = Set.of(
+                        ApplicationStatus.FINANCE_REVIEW_PENDING,
+                        ApplicationStatus.READY_FOR_DISBURSEMENT,
+                        ApplicationStatus.DISBURSED,
+                        ApplicationStatus.COMPLETED
+                );
+                if (!allowedFinance.contains(application.getStatus())) {
                     throw new InvalidOperationException(
-                            "Application is not in your review stage. Current status: " + application.getStatus());
+                            "Application is not in your review or disbursement stage. Current status: " + application.getStatus());
                 }
                 break;
             default:
@@ -329,7 +337,7 @@ public class DocumentService {
     }
 
     /**
-     * During the disbursement lifecycle (READY_FOR_DISBURSEMENT / DISBURSED),
+     * During the disbursement lifecycle (READY_FOR_DISBURSEMENT / DISBURSED / COMPLETED),
      * field and district officers are permitted (by checkDocumentAccess) to reach
      * an application's documents so they can verify utilization proofs — but they
      * must NOT see KYC documents (stage == null) at that point. This returns true
@@ -346,7 +354,8 @@ public class DocumentService {
         }
         ApplicationStatus status = application.getStatus();
         return status == ApplicationStatus.READY_FOR_DISBURSEMENT
-                || status == ApplicationStatus.DISBURSED;
+                || status == ApplicationStatus.DISBURSED
+                || status == ApplicationStatus.COMPLETED;
     }
 
     /**
