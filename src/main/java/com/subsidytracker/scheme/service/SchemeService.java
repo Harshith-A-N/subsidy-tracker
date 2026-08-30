@@ -37,6 +37,17 @@ public class SchemeService {
         schemeRepository.findByName(request.getName())
                 .ifPresent(s -> { throw new InvalidOperationException("A scheme with this name already exists."); });
 
+        if (request.getMaxIncome() != null && request.getMaxIncome().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new InvalidOperationException("Scheme maximum income limit must be greater than 0.");
+        }
+        if (request.getMinIncome() != null && request.getMinIncome().compareTo(BigDecimal.ZERO) < 0) {
+            throw new InvalidOperationException("Scheme minimum income limit cannot be negative.");
+        }
+        if (request.getMinIncome() != null && request.getMaxIncome() != null
+                && request.getMinIncome().compareTo(request.getMaxIncome()) > 0) {
+            throw new InvalidOperationException("Minimum income limit cannot be greater than maximum income limit.");
+        }
+
         Scheme scheme = new Scheme();
         scheme.setName(request.getName());
         scheme.setDescription(request.getDescription());
@@ -72,6 +83,18 @@ public class SchemeService {
     @Transactional
     public SchemeResponseDto updateScheme(Long id, SchemeRequestDto request) {
         Scheme scheme = findSchemeOrThrow(id);
+
+        if (request.getMaxIncome() != null && request.getMaxIncome().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new InvalidOperationException("Scheme maximum income limit must be greater than 0.");
+        }
+        if (request.getMinIncome() != null && request.getMinIncome().compareTo(BigDecimal.ZERO) < 0) {
+            throw new InvalidOperationException("Scheme minimum income limit cannot be negative.");
+        }
+        if (request.getMinIncome() != null && request.getMaxIncome() != null
+                && request.getMinIncome().compareTo(request.getMaxIncome()) > 0) {
+            throw new InvalidOperationException("Minimum income limit cannot be greater than maximum income limit.");
+        }
+
         scheme.setDescription(request.getDescription());
         scheme.setMinIncome(request.getMinIncome());
         scheme.setMaxIncome(request.getMaxIncome());
@@ -87,6 +110,22 @@ public class SchemeService {
     @Transactional
     public SchemeSlabDto addSlab(Long schemeId, SchemeSlabDto dto) {
         Scheme scheme = findSchemeOrThrow(schemeId);
+
+        List<RegionalBudget> regionalBudgets = regionalBudgetRepository.findBySchemeId(schemeId);
+        if (!regionalBudgets.isEmpty()) {
+            BigDecimal maxRegionalBudget = regionalBudgets.stream()
+                    .map(RegionalBudget::getAllocatedBudget)
+                    .filter(b -> b != null)
+                    .max(BigDecimal::compareTo)
+                    .orElse(BigDecimal.ZERO);
+            if (maxRegionalBudget.compareTo(BigDecimal.ZERO) > 0
+                    && dto.getGrantAmount() != null
+                    && dto.getGrantAmount().compareTo(maxRegionalBudget) > 0) {
+                throw new InvalidOperationException("Grant amount (" + dto.getGrantAmount()
+                        + ") cannot exceed the maximum allocated regional budget (" + maxRegionalBudget + ") for this scheme.");
+            }
+        }
+
         SchemeSlab slab = new SchemeSlab();
         slab.setScheme(scheme);
         slab.setCategory(dto.getCategory());

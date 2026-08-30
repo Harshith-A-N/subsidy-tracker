@@ -55,6 +55,10 @@ public class BeneficiaryService {
                             "A beneficiary with this national ID already exists.");
                 });
 
+        if (request.getAnnualIncome() != null && request.getAnnualIncome().compareTo(java.math.BigDecimal.ZERO) < 0) {
+            throw new InvalidOperationException("Annual income cannot be negative.");
+        }
+
         Beneficiary beneficiary = new Beneficiary();
         beneficiary.setFullName(request.getFullName());
         beneficiary.setNationalIdNumber(request.getNationalIdNumber());
@@ -117,6 +121,10 @@ public class BeneficiaryService {
 
         if (!isOwner && !isAdmin) {
             throw new InvalidOperationException("You are not authorized to update this beneficiary profile.");
+        }
+
+        if (request.getAnnualIncome() != null && request.getAnnualIncome().compareTo(java.math.BigDecimal.ZERO) < 0) {
+            throw new InvalidOperationException("Annual income cannot be negative.");
         }
 
         beneficiary.setFullName(request.getFullName());

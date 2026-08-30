@@ -81,6 +81,18 @@ public class ApplicationService {
             throw new InvalidOperationException("Cannot apply to an inactive scheme.");
         }
 
+        // Prevent duplicate applications: verify if an active application for this scheme already exists
+        List<ApplicationStatus> terminalStatuses = List.of(
+                ApplicationStatus.NOT_ELIGIBLE,
+                ApplicationStatus.FIELD_REJECTED,
+                ApplicationStatus.DISTRICT_REJECTED,
+                ApplicationStatus.FINANCE_REJECTED,
+                ApplicationStatus.APPLICATION_CANCELLED
+        );
+        if (applicationRepository.existsByBeneficiaryIdAndSchemeIdAndStatusNotIn(beneficiary.getId(), scheme.getId(), terminalStatuses)) {
+            throw new InvalidOperationException("You already have an active application for this scheme.");
+        }
+
         Application application = new Application();
         application.setBeneficiary(beneficiary);
         application.setScheme(scheme);
@@ -105,6 +117,11 @@ public class ApplicationService {
         if (application.getStatus() != ApplicationStatus.DRAFT) {
             throw new InvalidOperationException(
                     "Only DRAFT applications can be submitted. Current status: " + application.getStatus());
+        }
+
+        // Check if scheme is active
+        if (!application.getScheme().isActive()) {
+            throw new InvalidOperationException("Cannot submit application: the scheme is currently inactive.");
         }
 
         // Ownership check: the authenticated user must own this application

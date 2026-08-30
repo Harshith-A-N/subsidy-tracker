@@ -16,4 +16,5 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
     Page<Application> findByStatus(ApplicationStatus status, Pageable pageable);
     List<Application> findByBeneficiaryId(Long beneficiaryId);
     Page<Application> findByBeneficiaryId(Long beneficiaryId, Pageable pageable);
+    boolean existsByBeneficiaryIdAndSchemeIdAndStatusNotIn(Long beneficiaryId, Long schemeId, List<ApplicationStatus> statuses);
 }
