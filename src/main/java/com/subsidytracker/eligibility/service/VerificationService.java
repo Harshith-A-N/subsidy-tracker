@@ -92,6 +92,12 @@ public class VerificationService {
         VerificationLevel level =
                 determineLevelFromRole(officer.getRole());
 
+        if (application.getBeneficiary() != null
+                && application.getBeneficiary().getUser() != null
+                && application.getBeneficiary().getUser().getId() == officerId) {
+            throw new InvalidOperationException("Officers are not permitted to verify their own applications.");
+        }
+
         // Confirm the application is actually waiting at this stage
         validateApplicationIsAtStage(application, level);
 

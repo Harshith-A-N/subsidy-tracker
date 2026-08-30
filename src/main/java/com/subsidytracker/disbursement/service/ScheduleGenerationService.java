@@ -138,7 +138,13 @@ public class ScheduleGenerationService {
                     .findFirst()
                     .ifPresent(rb -> {
                         BigDecimal current = rb.getUtilizedBudget() != null ? rb.getUtilizedBudget() : BigDecimal.ZERO;
-                        rb.setUtilizedBudget(current.add(schedule.getScheduledAmount()));
+                        BigDecimal newUtilized = current.add(schedule.getScheduledAmount());
+                        if (rb.getAllocatedBudget() != null && newUtilized.compareTo(rb.getAllocatedBudget()) > 0) {
+                            throw new InvalidOperationException("Cannot release funds: Releasing "
+                                    + schedule.getScheduledAmount() + " would exceed the allocated regional budget limit ("
+                                    + rb.getAllocatedBudget() + ") for region: " + region + ".");
+                        }
+                        rb.setUtilizedBudget(newUtilized);
                         regionalBudgetRepository.save(rb);
                     });
         }

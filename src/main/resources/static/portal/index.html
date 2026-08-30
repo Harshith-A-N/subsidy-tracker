@@ -1647,7 +1647,7 @@
             if (token) headers['Authorization'] = 'Bearer ' + token;
             let res, body;
             try {
-                res = await fetch(API_BASE + path, { ...options, headers });
+                res = await fetch(API_BASE + path, { cache: 'no-store', ...options, headers });
             } catch (e) {
                 return { success: false, error: 'Could not reach the server. Is the backend running?' };
             }
@@ -2920,13 +2920,17 @@
                 let proofSection = '';
                 if (activeReleasedStage) {
                     const ms = byStage[activeReleasedStage.stageId];
+                    const isFinalStage = sorted.length > 0 && activeReleasedStage.stageId === sorted[sorted.length - 1].stageId;
                     if (ms && ms.complianceStatus === 'PROOF_SUBMITTED') {
-                        proofSection = `<div class="alert alert-info" style="margin-top:14px"><span class="alert-icon">📸</span><div><strong>Utilization Proof Submitted for ${activeReleasedStage.stageName}</strong><br><span style="font-size:12px">Your uploaded proof is under review by the Field/District Officer. Next tranche will unlock once verified.</span></div></div>`;
+                        proofSection = `<div class="alert alert-info" style="margin-top:14px"><span class="alert-icon">📸</span><div><strong>Utilization Proof Submitted for ${activeReleasedStage.stageName}</strong><br><span style="font-size:12px">Your uploaded proof is under review by the Field/District Officer. ${isFinalStage ? 'Final closure will complete once verified.' : 'Next tranche will unlock once verified.'}</span></div></div>`;
                     } else {
+                        const hintText = isFinalStage 
+                            ? `Funds (${fmtINRFull(Number(activeReleasedStage.scheduledAmount) || 0)}) have been released! Please upload final closure proof to complete your scheme lifecycle.`
+                            : `Funds (${fmtINRFull(Number(activeReleasedStage.scheduledAmount) || 0)}) have been released! You must upload proof of fund utilization (e.g. photo of equipment/work) before the next installment can be released.`;
                         proofSection = `
                         <div class="card-glass" style="margin-top:14px;padding:14px;border:1px solid var(--primary-light)">
                           <div style="font-size:14px;font-weight:700;margin-bottom:6px">📸 Upload Utilization Proof for Stage: ${activeReleasedStage.stageName}</div>
-                          <p class="text-xs text-muted" style="margin-bottom:10px">Funds (${fmtINRFull(Number(activeReleasedStage.scheduledAmount) || 0)}) have been released! You must upload proof of fund utilization (e.g. photo of equipment/work) before the next installment can be released.</p>
+                          <p class="text-xs text-muted" style="margin-bottom:10px">${hintText}</p>
                           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
                             <input type="file" id="proof-file-${app.id}-${activeReleasedStage.stageId}" accept="image/*,.pdf" class="form-input form-input-sm" style="max-width:300px" />
                             <button class="btn btn-primary btn-sm" onclick="benUploadProof(${app.id}, ${activeReleasedStage.stageId})">📤 Upload Utilization Proof</button>
@@ -3112,11 +3116,12 @@
                 m.innerHTML = `<div class="card"><div class="alert alert-danger"><span class="alert-icon">⚠️</span><div><strong>No Assigned Region</strong><br>Your account has no assigned region. Please contact an administrator.</div></div></div>`;
                 return;
             }
-            const [r1, r2] = await Promise.all([
+            const [r1, r2, r3] = await Promise.all([
                 foLoadRegionalApps('READY_FOR_DISBURSEMENT', officer),
-                foLoadRegionalApps('DISBURSED', officer)
+                foLoadRegionalApps('DISBURSED', officer),
+                foLoadRegionalApps('COMPLETED', officer)
             ]);
-            const apps = [...(r1.success ? r1.data : []), ...(r2.success ? r2.data : [])];
+            const apps = [...(r1.success ? r1.data : []), ...(r2.success ? r2.data : []), ...(r3.success ? r3.data : [])];
             m.innerHTML = `
   <div class="dash-header">
     <div><h2>Stage Compliance 🔍</h2><p>Verify utilization proofs and complete disbursement milestones · ${officer.region || 'Unassigned'}</p></div>
