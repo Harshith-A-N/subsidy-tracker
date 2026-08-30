@@ -2922,6 +2922,7 @@
                 const byStage = {};
                 milestones.forEach(ms => { if (ms.stage) byStage[ms.stage.id] = ms; });
 
+                const sorted = [...schedule].sort((a, b) => (a.stageSequenceNumber || 0) - (b.stageSequenceNumber || 0));
                 const activeReleasedStage = schedule.find(st => st.status === 'RELEASED' && (!byStage[st.stageId] || byStage[st.stageId].complianceStatus !== 'COMPLETED'));
 
                 let proofSection = '';
