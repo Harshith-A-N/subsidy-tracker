@@ -14,6 +14,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
@@ -109,7 +111,8 @@ public class AnalyticsServiceImpl implements AnalyticsService {
                         .doubleValue();
             }
 
-            result.add(new RegionUtilizationDto(region, allocated, utilized, utilizationPercent, totalCount, approvedCount));
+            result.add(new RegionUtilizationDto(region, allocated, utilized, utilizationPercent, totalCount,
+                    approvedCount));
         }
 
         return result;
@@ -208,7 +211,8 @@ public class AnalyticsServiceImpl implements AnalyticsService {
 
         for (RegionalBudget rb : budgets) {
             BigDecimal allocated = rb.getAllocatedBudget();
-            BigDecimal released = releasedMap.getOrDefault(rb.getScheme().getId() + "_" + rb.getRegionName(), BigDecimal.ZERO);
+            BigDecimal released = releasedMap.getOrDefault(rb.getScheme().getId() + "_" + rb.getRegionName(),
+                    BigDecimal.ZERO);
 
             double utilizationPercent = 0.0;
             if (allocated != null && allocated.compareTo(BigDecimal.ZERO) > 0) {
@@ -224,7 +228,8 @@ public class AnalyticsServiceImpl implements AnalyticsService {
                 severity = "WARNING";
             }
 
-            warnings.add(new BudgetExhaustionWarningDto(rb.getScheme().getName(), rb.getRegionName(), utilizationPercent, severity));
+            warnings.add(new BudgetExhaustionWarningDto(rb.getScheme().getName(), rb.getRegionName(),
+                    utilizationPercent, severity));
         }
 
         return warnings;
@@ -328,7 +333,44 @@ public class AnalyticsServiceImpl implements AnalyticsService {
                 rejectedApplications,
                 totalBudgetAllocated,
                 totalBudgetUtilized,
-                overdueMilestones
-        );
+                overdueMilestones);
+    }
+
+    @Override
+    public List<DisbursementTrendDto> disbursementTrends() {
+        DateTimeFormatter labelFormatter = DateTimeFormatter.ofPattern("MMM yyyy");
+        Map<YearMonth, BigDecimal> monthlyTotals = new TreeMap<>();
+        Map<YearMonth, Long> monthlyCounts = new HashMap<>();
+
+        // Initialize timeline: last 6 months up to current month
+        YearMonth now = YearMonth.now();
+        for (int i = 5; i >= 0; i--) {
+            YearMonth ym = now.minusMonths(i);
+            monthlyTotals.put(ym, BigDecimal.ZERO);
+            monthlyCounts.put(ym, 0L);
+        }
+
+        // Aggregate actual released disbursement records
+        List<Object[]> rows = repository.getReleasedDisbursementSchedules();
+        for (Object[] row : rows) {
+            LocalDate date = (LocalDate) row[0];
+            BigDecimal amount = (BigDecimal) row[1];
+            if (date != null && amount != null) {
+                YearMonth ym = YearMonth.from(date);
+                monthlyTotals.put(ym, monthlyTotals.getOrDefault(ym, BigDecimal.ZERO).add(amount));
+                monthlyCounts.put(ym, monthlyCounts.getOrDefault(ym, 0L) + 1);
+            }
+        }
+
+        List<DisbursementTrendDto> result = new ArrayList<>();
+        for (Map.Entry<YearMonth, BigDecimal> entry : monthlyTotals.entrySet()) {
+            YearMonth ym = entry.getKey();
+            String label = ym.format(labelFormatter);
+            BigDecimal amount = entry.getValue();
+            long count = monthlyCounts.getOrDefault(ym, 0L);
+            result.add(new DisbursementTrendDto(label, amount, count));
+        }
+
+        return result;
     }
 }

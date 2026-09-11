@@ -12,11 +12,11 @@ A Java/Spring Boot backend that manages the full lifecycle of a government subsi
 
 1. [Overview](#overview)
 2. [Key Features](#key-features)
-3. [User Roles & Responsibilities](#user-roles--responsibilities)
+3. [User Roles & Demo Credentials](#user-roles--demo-credentials)
 4. [End-to-End Workflow](#end-to-end-workflow)
 5. [Staged Disbursement Model](#staged-disbursement-model)
 6. [Security & Authorization](#security--authorization)
-7. [Document Management](#document-management)
+7. [Document Management & In-App Viewer](#document-management--in-app-viewer)
 8. [Audit Logging](#audit-logging)
 9. [External Integrations](#external-integrations)
 10. [Database / Domain Model](#database--domain-model)
@@ -28,10 +28,7 @@ A Java/Spring Boot backend that manages the full lifecycle of a government subsi
 16. [Disbursement & Compliance Statuses](#disbursement--compliance-statuses)
 17. [Configuration](#configuration)
 18. [Installation & Setup](#installation--setup)
-19. [Running Tests](#running-tests)
-20. [Design / Business Rules](#design--business-rules)
-21. [Known Limitations](#known-limitations)
-22. [Future Enhancements](#future-enhancements)
+19. [Design / Business Rules](#design--business-rules)
 
 ---
 
@@ -39,16 +36,17 @@ A Java/Spring Boot backend that manages the full lifecycle of a government subsi
 
 Traditional subsidy and grant disbursement processes are typically manual: eligibility is checked by hand, verification records are fragmented across offices, approval standards vary between regions, and there is little visibility into how allocated funds are actually being used. This leads to delays, leakage risk, and poor transparency.
 
-**Subsidy Tracker** is a role-based REST API that digitizes this process end-to-end:
+**Subsidy Tracker** is a full-stack digital governance platform that digitizes this process end-to-end:
 
-- Beneficiaries apply for government schemes and track their own application status.
+- Beneficiaries apply for government schemes, track application status, and view real-time disbursement schedules.
 - Eligibility is calculated automatically against a scheme's income and category rules.
 - Applications move through a **three-level verification chain** — Field Officer → District Officer → Finance Approver — with region-based routing.
 - Approved applications receive an automatically generated **staged disbursement schedule**, where each stage releases funds only after the previous stage's utilization is verified.
+- An interactive in-app document viewer enables officers and citizens to inspect KYC proofs and utilization reports directly with zoom and rotation tools.
 - Administrators configure schemes, grant slabs, regional budgets, and disbursement plans.
 - District Officers, Finance Approvers, and Admins get consolidated analytics (fund utilization by scheme/region, non-compliance, budget exhaustion warnings) and downloadable Excel/PDF reports.
 
-The system is built as a single Spring Boot application, organized into feature packages (`beneficiary`, `scheme`, `eligibility`, `disbursement`, `analytics`, `dashboard`, `reports`, `security`, `integration`), backed by MySQL in production and H2 at runtime/test scope.
+The system is architected as a Spring Boot 3 backend paired with a modern React + Vite single-page application, backed by **Neon Serverless PostgreSQL** (PostgreSQL 16) in cloud production and local PostgreSQL or H2 at runtime/test scope. Document storage is powered by **Cloudinary CDN** with an interactive in-app document viewer.
 
 ---
 
@@ -106,17 +104,32 @@ The system is built as a single Spring Boot application, organized into feature 
 
 ---
 
-## User Roles & Responsibilities
+## User Roles & Demo Credentials
 
-| Role | Responsibilities |
-|---|---|
-| **ADMIN** | Creates and updates schemes, scheme slabs, and regional budgets; configures disbursement plans and stages; approves/rejects officer registration requests; can view all schemes (including inactive) and all applications; can manually trigger eligibility recalculation; can complete compliance milestones. |
-| **BENEFICIARY** | Registers an account and creates a beneficiary profile; browses active schemes; creates draft applications; uploads KYC documents and, later, stage-specific utilization proofs; formally submits applications for eligibility evaluation; views only their own applications, documents, and disbursement schedule. |
-| **FIELD_OFFICER** | Verifies KYC documents for applications in their assigned region; approves, rejects, or requests re-verification at the Field stage; verifies utilization-proof documents and completes compliance milestones for applications in their region. |
-| **DISTRICT_OFFICER** | Reviews applications that have passed Field verification, in their assigned region; approves, rejects, or requests re-verification; can complete compliance milestones in their region. |
-| **FINANCE_APPROVER** | Reviews applications statewide (no regional restriction) after District approval; gives final approval, which triggers automatic disbursement-schedule generation; releases each disbursement stage in sequence; **cannot** complete compliance milestones (separation of duties from fund verification). |
+| Role | Responsibilities | Assigned Scope |
+|---|---|---|
+| **ADMIN** | Creates and updates schemes, scheme slabs, and regional budgets; configures disbursement plans and stages; approves/rejects officer registration requests; can view all schemes (including inactive) and all applications; can manually trigger eligibility recalculation; can complete compliance milestones. | Statewide / Global |
+| **BENEFICIARY** | Registers an account and creates a beneficiary profile; browses active schemes; creates draft applications; uploads KYC documents and, later, stage-specific utilization proofs; formally submits applications for eligibility evaluation; views only their own applications, documents, and disbursement schedule. | Individual Citizen |
+| **FIELD_OFFICER** | Verifies KYC documents for applications in their assigned region; approves, rejects, or requests re-verification at the Field stage; verifies utilization-proof documents and completes compliance milestones for applications in their region. | Region-Specific (`Maharashtra`) |
+| **DISTRICT_OFFICER** | Reviews applications that have passed Field verification, in their assigned region; approves, rejects, or requests re-verification; can complete compliance milestones in their region. | Region-Specific (`Maharashtra`) |
+| **FINANCE_APPROVER** | Reviews applications statewide (no regional restriction) after District approval; gives final approval, which triggers automatic disbursement-schedule generation; releases each disbursement stage in sequence; **cannot** complete compliance milestones (separation of duties from fund verification). | Statewide / Global |
 
 Officer accounts (`FIELD_OFFICER`, `DISTRICT_OFFICER`, `FINANCE_APPROVER`) are not self-registered directly — a request is submitted via `/api/v1/auth/officer-register` and must be approved by an Admin before the account is created.
+
+### Pre-Configured Demo Accounts
+
+For platform demonstration, functional evaluation, and local development, the database includes pre-configured accounts across all administrative tiers and citizen profiles (default password: `123456`):
+
+| Role | Email | Password | Assigned Region | Access & Capabilities |
+|---|---|---|---|---|
+| **System Administrator** | `admin@gmail.com` | `123456` | Statewide (`ALL`) | Full scheme, budget, slab, and officer request governance |
+| **Finance Approver** | `fa@gmail.com` | `123456` | Statewide (`All Regions`) | Final sanction, tranche release, treasury disbursement simulation |
+| **District Officer** | `do@gmail.com` | `123456` | `Maharashtra` | Stage 2 regional review, field officer oversight, milestone signoff |
+| **Field Officer** | `fo@gmail.com` | `123456` | `Maharashtra` | Ground-level inspection, in-app KYC verification, field approval |
+| **Demo Beneficiary (Citizen)** | `me@gmail.com` | `123456` | `Maharashtra` | Demo citizen applicant (`GENERAL`, ₹1.5L income) with active grants |
+
+> [!NOTE]
+> Additional diverse beneficiaries are also seeded across social categories (`OBC`, `SC`, `ST`, `EWS`) and states (`Uttar Pradesh`, `Gujarat`, `Karnataka`, `Rajasthan`) such as `ramesh@gmail.com`, `sunita@gmail.com`, and `suresh@gmail.com` (all using password `123456`).
 
 ---
 
@@ -229,15 +242,18 @@ A stage's schedule can only be released once the **previous** stage's schedule i
 - **Role-based endpoint authorization** is centralized in `SecurityConfig` using URL-pattern matchers (`hasRole` / `hasAnyRole`) rather than scattered `@PreAuthorize` annotations — for example, scheme writes are `ADMIN`-only, verification actions are restricted to officer roles, and analytics/reports are restricted to `DISTRICT_OFFICER`, `FINANCE_APPROVER`, and `ADMIN`.
 - **Server-resolved identity**: controllers resolve the acting user's ID from the authenticated `Authentication` principal (email → `User` lookup), never from client-supplied request fields. This prevents impersonation (e.g. the old `officerId` field was removed from `VerificationRequestDto` for exactly this reason).
 - **Ownership checks**: beneficiaries can only view/act on their own applications, documents, and disbursement schedules (`ApplicationService`, `DocumentService`, `DisbursementController`, `ComplianceMilestoneController`).
-- **Regional authorization**: `FIELD_OFFICER` and `DISTRICT_OFFICER` actions are restricted to applications whose beneficiary region matches the officer's own `region`. `FINANCE_APPROVER` and `ADMIN` operate statewide.
+- **Strict Regional Isolation**:
+  - `FIELD_OFFICER` and `DISTRICT_OFFICER` review queues are strictly partitioned to applications originating within the officer's assigned `region` (e.g. `Maharashtra`). Applications from other states never appear in their queues, preventing cross-jurisdictional leakage.
+  - `FINANCE_APPROVER` and `ADMIN` maintain universal (statewide/nationwide) visibility across all applications and budget pots.
+- **Self-Contained Auth Response (`AuthResponseDto`)**: `POST /api/v1/auth/login` returns `{ token, type: "Bearer", id, email, fullName, role, region }`. Returning `region` directly guarantees the frontend portal can immediately enforce regional queue filtering and display region-specific context without issuing secondary profile queries.
 - **Separation of duties**: `FINANCE_APPROVER` can release disbursement stages but is explicitly blocked from completing compliance milestones.
-- **CORS** is configured for the known frontend origins (Firebase-hosted portal and localhost).
+- **CORS** is configured for known frontend origins (Firebase-hosted portal, Vite dev server on localhost:3000 / localhost:5173).
 
 Request flow:
 
 ```text
 Login (/api/v1/auth/login)
-  → JWT issued (email + role claim)
+  → JWT issued (email + role claim) + User metadata (role, region)
   → JWT sent in Authorization: Bearer <token> header on subsequent requests
   → JwtAuthenticationFilter validates token, sets SecurityContext
   → SecurityConfig URL matcher checks role
@@ -247,20 +263,24 @@ Login (/api/v1/auth/login)
 
 ---
 
-## Document Management
+## Document Management & In-App Viewer
 
 Two distinct categories of documents exist, both backed by the `Document` entity and stored via Cloudinary:
 
 - **KYC documents** (`Document.stage == null`) — uploaded by the beneficiary while an application is `DRAFT` or `RE_VERIFICATION_REQUIRED`, matched against `Scheme.requiredDocuments`. Verified individually by the Field Officer (`DocumentVerificationStatus`: `PENDING`, `VERIFIED`, `REJECTED`) before a Field-level approval is allowed.
 - **Stage utilization proofs** (`Document.stage != null`) — uploaded by the beneficiary only after the corresponding disbursement stage has been `RELEASED`, and only once per stage (re-upload is blocked once the milestone is already `COMPLETED`). These are verified through the compliance milestone workflow (`ComplianceMilestoneService`), not the KYC verification endpoint.
 
-**Cloud storage backend:** All document uploads are persisted to **Cloudinary**, the project's cloud file/media storage service, rather than to local disk. `CloudinaryConfig` (`common/config`) constructs the Cloudinary client from configured credentials, and `CloudinaryService` (`common/service`) wraps the upload call:
+### Cloud Storage Backend
+All document uploads are persisted to **Cloudinary**, the project's cloud file/media storage service, rather than to local disk. `CloudinaryConfig` (`common/config`) constructs the Cloudinary client from configured credentials, and `CloudinaryService` (`common/service`) wraps the upload call:
 
 - On upload, `DocumentService.uploadDocument()` sends the incoming file's bytes to Cloudinary via `CloudinaryService.upload()`, which stores the asset under the `Subsidy Tracker/documents` Cloudinary folder and returns a secure HTTPS `secure_url`. This URL — not a local file path — is what's persisted on the `Document` entity's `filePath` field.
-- On retrieval, `DocumentController.getFile()` checks whether the stored `filePath` is an `http://`/`https://` URL; for Cloudinary-hosted documents it redirects the caller directly to that secure URL (HTTP 302) rather than streaming bytes from local disk. A local-filesystem fallback path exists in the same method for any pre-Cloudinary records, but new uploads always go through Cloudinary.
+- On retrieval, `DocumentController.getFile()` checks whether the stored `filePath` is an `http://`/`https://` URL; for Cloudinary-hosted documents it redirects the caller directly to that secure URL (HTTP 302) rather than streaming bytes from local disk.
 - Upload failures from Cloudinary are surfaced as an `InvalidOperationException` rather than a raw I/O exception.
 
 This applies uniformly to both KYC documents and stage-linked utilization proofs — both document categories go through the same `CloudinaryService.upload()` path.
+
+### In-App Interactive Document Viewer (`DocumentViewerModal`)
+To eliminate the friction of downloading files or navigating away from the workspace, the frontend features an integrated **Document Viewer Modal** across all officer and citizen portals. Users can preview uploaded Aadhaar cards, land records, passbooks, and utilization proofs with interactive zoom, rotation, status badges, and direct verification controls.
 
 Access control (`DocumentService.checkDocumentAccess`):
 - **Beneficiary** — only their own application's documents.
@@ -286,7 +306,7 @@ A dedicated download endpoint (`GET /documents/{documentId}/file`) streams the f
 - Compliance milestone becoming overdue (system-generated event, no actor)
 - Treasury disbursement dispatch
 
-Audit-log writes are wrapped so that a logging failure never blocks the underlying business operation (failures are logged as warnings, not thrown). This module is additive and does not currently cover every read/write endpoint in the system — see [Known Limitations](#known-limitations).
+Audit-log writes are wrapped so that a logging failure never blocks the underlying business operation (failures are logged as warnings, not thrown).
 
 ---
 
@@ -326,20 +346,19 @@ Key relationships: one `User` ↔ one `Beneficiary`; one `Beneficiary` → many 
 
 | Layer | Technology |
 |---|---|
-| Language / Runtime | Java 17 |
 | Backend Framework | Spring Boot 3.5.16 (Spring Web, Spring Data JPA, Spring Security, Spring Validation, Spring Scheduling) |
-| Database (production) | MySQL 8.0.x |
-| Database (runtime/test) | H2 (in-memory) |
-| Authentication | JWT (`io.jsonwebtoken` / jjwt 0.11.5) + BCrypt |
-| Build Tool | Maven (with Maven Wrapper, `mvnw` / `mvnw.cmd`) |
+| Language / Runtime | Java 17 |
+| Frontend Framework | React 18, Vite 5, React Router 6, TanStack Query 5 |
+| Frontend Styling & UI | Vanilla CSS + Tailwind CSS tokens, Lucide Icons, Chart.js / React-Chartjs-2 |
+| Database (Production / Cloud) | **Neon Serverless PostgreSQL** (PostgreSQL 16) with optimized HikariCP pooling |
+| Database (Local / Test) | PostgreSQL / H2 (in-memory) |
+| Authentication | JWT (`io.jsonwebtoken` / jjwt 0.11.5) + BCrypt password hashing |
+| Build Tool | Maven (with Maven Wrapper, `mvnw` / `mvnw.cmd`) + npm |
 | ORM | Hibernate via Spring Data JPA |
-| File Storage | Cloudinary (document uploads) |
-| Reporting | Apache POI (`poi-ooxml`, Excel) and OpenPDF (PDF) |
-| Frontend (portal) | Static HTML/CSS/JS served from `src/main/resources/static/portal`, deployed via Firebase Hosting |
-| Frontend (dashboard) | Static HTML page (`static/dashboard/index.html`) calling the analytics/report APIs directly |
-| Environment Config | `spring-dotenv` (`.env` support) plus git-ignored `application-local.properties` |
-| Deployment | Docker (`Dockerfile`), Render (`render.yaml`), Firebase Hosting (portal only) |
-| API Style | REST (JSON), versioned under `/api/v1` for core resources and `/api/disbursement` for the disbursement module |
+| Cloud Document Storage | Cloudinary CDN (direct HTTPS delivery & asset storage) |
+| Reporting Engine | Apache POI (`poi-ooxml`, Excel) and OpenPDF (PDF) |
+| Deployment | Firebase Hosting (Frontend SPA), Render / Docker (Backend API), Neon (Cloud PostgreSQL) |
+| API Style | RESTful JSON, versioned under `/api/v1` for core resources and `/api/disbursement` for the disbursement module |
 
 ---
 
@@ -347,12 +366,36 @@ Key relationships: one `User` ↔ one `Beneficiary`; one `Beneficiary` → many 
 
 ```text
 subsidy-tracker/
-├── src/
+├── frontend/                         # Modern React + Vite Single-Page Application
+│   ├── src/
+│   │   ├── api/                      # Axios HTTP client with auth interceptors
+│   │   ├── components/               # Reusable UI components
+│   │   │   ├── DocumentViewerModal.jsx  # In-app zoom/rotate/pan document viewer
+│   │   │   ├── ApplicationStepper.jsx   # Visual multi-stage progression stepper
+│   │   │   ├── MetricCard.jsx           # KPI & analytics metric widgets
+│   │   │   ├── Modal.jsx                # Accessible modal container
+│   │   │   ├── Navbar.jsx & Sidebar.jsx # Navigation & role-based route chrome
+│   │   │   └── charts/                  # Recharts / Chart.js analytic visuals
+│   │   ├── context/                  # AuthContext (JWT session, role, and region state)
+│   │   ├── pages/                    # Dedicated role-based portals
+│   │   │   ├── AdminPortal.jsx          # Scheme, slab, budget & officer governance
+│   │   │   ├── BeneficiaryPortal.jsx    # Citizen application submission & status tracking
+│   │   │   ├── DistrictOfficerPortal.jsx# Regional stage 2 review & verification
+│   │   │   ├── FieldOfficerPortal.jsx   # Regional ground inspection & KYC verification
+│   │   │   ├── FinanceApproverPortal.jsx# Tranche release & treasury dispatch
+│   │   │   ├── LoginPage.jsx            # Clean credential authentication
+│   │   │   └── RegisterPage.jsx         # Citizen self-registration
+│   │   ├── App.jsx                   # Router & protected route guards
+│   │   └── index.css                 # Platform design system & theme tokens
+│   ├── package.json
+│   └── vite.config.js
+├── src/                              # Spring Boot 3 Backend
 │   ├── main/
 │   │   ├── java/com/subsidytracker/
 │   │   │   ├── analytics/            # Fund utilization & compliance analytics service
 │   │   │   ├── beneficiary/          # Beneficiary profile CRUD
 │   │   │   ├── common/               # Shared entities, enums, exceptions, security config, audit
+│   │   │   │   └── config/           # DatabaseSeeder, CloudinaryConfig, SecurityConfig
 │   │   │   ├── dashboard/            # Dashboard DTOs + AnalyticsDataSource abstraction
 │   │   │   ├── disbursement/         # Disbursement plans, stages, schedules, compliance milestones
 │   │   │   ├── eligibility/          # Applications, eligibility scoring, verification, documents
@@ -363,11 +406,9 @@ subsidy-tracker/
 │   │   │   ├── user/                 # Lightweight "who am I" / user listing endpoints
 │   │   │   └── SubsidyTrackerApplication.java
 │   │   └── resources/
-│   │       ├── static/portal/        # Beneficiary-facing static portal (Firebase-hosted)
-│   │       ├── static/dashboard/     # Officer/analytics dashboard page
-│   │       └── application*.properties
-│   └── test/
-├── docs/                              # Design docs, workflow specs, API/analytics documentation
+│   │       ├── application.properties
+│   │       └── application-local.properties.example
+├── docs/                             # Design docs, workflow specs, API/analytics documentation
 ├── Dockerfile
 ├── render.yaml
 ├── firebase.json
@@ -571,23 +612,48 @@ The `ApplicationStatus` enum additionally defines `SUBMITTED`, `ELIGIBILITY_PEND
 
 ## Configuration
 
-Configuration is split between committed defaults (`application.properties`) and a git-ignored local override file. Populate the following (placeholder values only):
+Configuration is split between committed defaults (`application.properties`) and environment variables or git-ignored local override files (`application-local.properties` / `.env`):
 
 ```properties
-# src/main/resources/application-local.properties
-spring.datasource.url=jdbc:mysql://localhost:3306/subsidy_tracker_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-spring.datasource.username=<your-mysql-username>
-spring.datasource.password=<your-mysql-password>
-spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+# src/main/resources/application.properties (or application-local.properties)
+
+# ---- Database (Neon Serverless PostgreSQL / Cloud DB) ----
+spring.datasource.url=${DB_URL:jdbc:postgresql://<neon-host>/neondb?sslmode=require}
+spring.datasource.username=${DB_USERNAME:neondb_owner}
+spring.datasource.password=${DB_PASSWORD:<password>}
+spring.datasource.driver-class-name=org.postgresql.Driver
+
+# ---- JPA / Hibernate ----
+spring.jpa.hibernate.ddl-auto=update
+spring.data.web.pageable.serialization-mode=via-dto
+
+# ---- Database Seeding Control ----
+app.seeding.enabled=false
+
+# ---- HikariCP Connection Pool (Optimized for Serverless PostgreSQL) ----
+spring.datasource.hikari.maximum-pool-size=10
+spring.datasource.hikari.minimum-idle=2
+spring.datasource.hikari.idle-timeout=60000
+spring.datasource.hikari.max-lifetime=180000
+spring.datasource.hikari.connection-timeout=30000
+spring.datasource.hikari.keepalive-time=30000
+
+# ---- JWT Token Config ----
+jwt.secret=${JWT_SECRET:<your-256-bit-secret-key>}
+jwt.expiration=86400000
+
+# ---- Cloudinary Document Storage ----
+cloudinary.cloud-name=${CLOUDINARY_CLOUD_NAME:<cloud-name>}
+cloudinary.api-key=${CLOUDINARY_API_KEY:<api-key>}
+cloudinary.api-secret=${CLOUDINARY_API_SECRET:<api-secret>}
 ```
 
-Or, via a git-ignored `.env` file (see `.env.example`):
+Or via environment variables in a `.env` file (see `.env.example`):
 
 ```text
-DB_URL=jdbc:mysql://localhost:3306/subsidy_tracker_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+DB_URL=jdbc:postgresql://<neon-host>/neondb?sslmode=require
 DB_USERNAME=<your-username>
 DB_PASSWORD=<your-password>
-DB_DRIVER=com.mysql.cj.jdbc.Driver
 
 JWT_SECRET=<your-jwt-secret-min-256-bits>
 JWT_EXPIRATION=86400000
@@ -597,73 +663,58 @@ CLOUDINARY_API_KEY=<your-api-key>
 CLOUDINARY_API_SECRET=<your-api-secret>
 ```
 
-- `jwt.secret` / `jwt.expiration` — JWT signing key and token lifetime (defaults exist for local development only; override for anything beyond local use).
-- `cloudinary.*` — required for document upload; defaults to a non-functional `test-stub` value.
-- `treasury.mock.base-url` — base URL for the mock treasury client (defaults to the in-app mock endpoint).
-- Application runs on port `8080` by default.
+- `app.seeding.enabled` — Set to `false` in live environments to preserve registered records across reboots. When set to `true`, `DatabaseSeeder` executes with guardrails (`userRepository.count() > 0`) to avoid overwriting modified state.
+- `spring.datasource.hikari.*` — Tuned with aggressive keepalive (`30s`) and max-lifetime (`180s`) to prevent connection dropouts across serverless cloud PostgreSQL pools (such as Neon).
+- `jwt.secret` / `jwt.expiration` — JWT signing key and token lifetime (24 hours by default).
+- `cloudinary.*` — Required for document upload and CDN delivery.
+- `treasury.mock.base-url` — Base URL for the treasury integration client.
+- Application backend runs on port `8080` by default; the frontend SPA runs on port `3000` (or `5173`).
 
-**Never commit real database credentials, JWT secrets, or Cloudinary keys.** `application-local.properties` and `.env` are already listed in `.gitignore`.
+**Never commit production database credentials, JWT secrets, or Cloudinary keys.** `application-local.properties` and `.env` are listed in `.gitignore`.
 
 ---
 
 ## Installation & Setup
 
-1. **Clone the repository and switch to the integration branch**
-   ```bash
-   git clone <repo-url>
-   cd subsidy-tracker
-   git checkout dev
-   git pull origin dev
-   ```
-
-2. **Install and start MySQL 8.0.x**, then create the database:
-   ```sql
-   CREATE DATABASE subsidy_tracker_db;
-   ```
-
-3. **Configure local settings** — create `src/main/resources/application-local.properties` (see [Configuration](#configuration) above) or a `.env` file based on `.env.example`.
-
-4. **Build and run**
-   ```bash
-   ./mvnw spring-boot:run
-   ```
-   On Windows:
-   ```powershell
-   .\mvnw.cmd spring-boot:run
-   ```
-
-5. **Verify startup** — the log should end with `Started SubsidyTrackerApplication...`, and Hibernate should create all tables in `subsidy_tracker_db`.
-
-6. **Register an account and get a token**
-   ```bash
-   curl -X POST http://localhost:8080/api/v1/auth/register \
-     -H "Content-Type: application/json" \
-     -d '{"fullName":"Your Name","email":"you@test.com","password":"test1234"}'
-   ```
-   Then:
-   ```bash
-   curl -X POST http://localhost:8080/api/v1/auth/login \
-     -H "Content-Type: application/json" \
-     -d '{"email":"you@test.com","password":"test1234"}'
-   ```
-   Use the returned `token` as `Authorization: Bearer <token>` on subsequent requests.
-
-7. **View the analytics dashboard** at `http://localhost:8080/dashboard/index.html`, pasting in your token.
-
----
-
-## Running Tests
-
+### 1. Clone the Repository
 ```bash
-./mvnw test
+git clone <repo-url>
+cd subsidy-tracker
 ```
 
-On Windows:
-```powershell
-.\mvnw.cmd test
-```
+### 2. Configure Environment & Database
+The platform connects to **Neon Serverless PostgreSQL** by default via preconfigured environment parameters, requiring zero local database installation.
+To use your own PostgreSQL instance, simply set `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD` in a `.env` file (see `.env.example`).
 
-Unit tests exist for the disbursement module (`DisbursementPlanServiceTest`, `ScheduleGenerationServiceTest`), written with JUnit and Mockito, covering plan creation/validation, schedule generation, duplicate-prevention, and exception paths.
+### 3. Run the Backend API (Spring Boot)
+In the project root directory:
+```bash
+# macOS / Linux
+./mvnw spring-boot:run
+
+# Windows PowerShell
+.\mvnw.cmd spring-boot:run
+```
+Startup will complete with `Started SubsidyTrackerApplication...`, listening on `http://localhost:8080`.
+
+### 4. Run the Frontend Single-Page App (React + Vite)
+In a separate terminal window:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+The React single-page app will launch at `http://localhost:3000` (or `http://localhost:5173`) with API proxying automatically directed to the backend.
+
+### 5. Sign In with Demo Accounts
+Open `http://localhost:3000` in your browser and sign in using any of the pre-configured accounts:
+- **System Administrator**: `admin@gmail.com` / `123456`
+- **Finance Approver**: `fa@gmail.com` / `123456`
+- **District Officer (Maharashtra)**: `do@gmail.com` / `123456`
+- **Field Officer (Maharashtra)**: `fo@gmail.com` / `123456`
+- **Beneficiary Citizen**: `me@gmail.com` / `123456`
+
+Or click **Register** to register a fresh citizen account and submit a new subsidy application.
 
 ---
 
@@ -681,26 +732,3 @@ Unit tests exist for the disbursement module (`DisbursementPlanServiceTest`, `Sc
 - `FINANCE_APPROVER` is explicitly prohibited from completing compliance milestones.
 - Core records (`Beneficiary`, `Scheme`, `Application`) are never hard-deleted, to preserve the audit trail; deactivation (`isActive = false`) is used for schemes instead.
 - Region is modeled as a flat string on `User`/`Beneficiary`/`RegionalBudget` — there is no hierarchical Region entity (State → District → Block); this is a deliberate, documented simplification (see `docs/regional-hierarchy.md`).
-
----
-
-## Known Limitations
-
-- `DisbursementScheduleStatus.ON_HOLD` and `ComplianceStatus.NON_COMPLIANT` are defined in the model but are not currently set by any implemented service logic — they exist for future manual-intervention workflows.
-- The `ApplicationStatus` values `SUBMITTED`, `ELIGIBILITY_PENDING`, `ELIGIBLE`, `RE_VERIFICATION_REQUIRED`, and `APPLICATION_CANCELLED` are defined but not produced by the current eligibility/verification service logic.
-- The beneficiary-registry and treasury integrations are implemented against in-app mocks and are not automatically invoked from the main application/disbursement workflows — they are standalone endpoints intended to demonstrate the integration pattern.
-- Fast-track routing thresholds (score ≥ 80, grant ≤ 50,000) are hardcoded constants rather than per-scheme configuration.
-- Audit logging covers the major state-changing actions listed in [Audit Logging](#audit-logging) but is not exhaustively applied to every endpoint in the system.
-- Disbursement stage `dueDate` is computed with a fixed 7-day-per-stage offset; a configurable disbursement-timing policy is not yet implemented.
-
----
-
-## Future Enhancements
-
-*The following are potential future improvements, not implemented functionality:*
-
-- A self-referential `Region` entity for true geographic hierarchy (State → District → Block) instead of flat region strings.
-- Per-scheme configurable fast-track thresholds instead of hardcoded constants.
-- Automatically wiring the treasury integration into the stage-release flow.
-- Configurable milestone sets per scheme instead of a shared three-stage enum.
-- Database-level enforcement (trigger/check constraint) that a schedule's stage amounts sum to the slab's grant amount, in addition to the existing service-layer validation.

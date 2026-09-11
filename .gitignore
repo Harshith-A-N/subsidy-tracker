@@ -65,7 +65,9 @@ Thumbs.db
 application-local.properties
 src/main/resources/application-local.properties
 .env
-uploads/documents/
+uploads/
+frontend/node_modules/
+frontend/dist/
 
 # Temporary directories
 .tmp/*

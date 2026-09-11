@@ -82,7 +82,16 @@ public class ApplicationController {
     public ResponseEntity<Page<ApplicationResponseDto>> getByStatus(
             @PathVariable ApplicationStatus status,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        if (authentication != null) {
+            String email = authentication.getName();
+            User user = userRepository.findByEmail(email).orElse(null);
+            if (user != null && (user.getRole() == com.subsidytracker.common.enums.Role.FIELD_OFFICER
+                    || user.getRole() == com.subsidytracker.common.enums.Role.DISTRICT_OFFICER)) {
+                return ResponseEntity.ok(applicationService.getApplicationsByStatusAndRegion(status, user.getRegion(), PageRequest.of(page, size)));
+            }
+        }
         return ResponseEntity.ok(applicationService.getApplicationsByStatus(status, PageRequest.of(page, size)));
     }
 
