@@ -58,4 +58,9 @@ public class AnalyticsController {
     public ResponseEntity<List<CategoryDistributionDto>> beneficiaryCategoryDistribution() {
         return ResponseEntity.ok(analyticsService.beneficiaryCategoryDistribution());
     }
+
+    @GetMapping("/disbursement-trends")
+    public ResponseEntity<List<DisbursementTrendDto>> disbursementTrends() {
+        return ResponseEntity.ok(analyticsService.disbursementTrends());
+    }
 }

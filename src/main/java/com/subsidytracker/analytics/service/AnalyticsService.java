@@ -21,4 +21,6 @@ public interface AnalyticsService {
     List<CategoryDistributionDto> beneficiaryCategoryDistribution();
 
     DashboardOverviewDto overview();
+
+    List<DisbursementTrendDto> disbursementTrends();
 }
