@@ -133,11 +133,11 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PUT, "/api/disbursement/plans/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/disbursement/plans/**").hasRole("ADMIN")
 
-                // Compliance milestone creation (ADMIN) and completion (field/district officers & admin)
+                // Compliance milestone creation and completion
                 .requestMatchers(HttpMethod.POST, "/api/disbursement/compliance/application/*")
-                    .hasRole("ADMIN")
+                    .hasAnyRole("FINANCE_APPROVER", "ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/disbursement/compliance/*/complete")
-                    .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "ADMIN")
+                    .hasAnyRole("FINANCE_APPROVER", "FIELD_OFFICER", "DISTRICT_OFFICER", "ADMIN")
 
                 // Compliance milestone listings: pending/overdue
                 .requestMatchers(HttpMethod.GET, "/api/disbursement/compliance/pending")
@@ -167,7 +167,15 @@ public class SecurityConfig {
 
                 // Verification actions — officers only
                 .requestMatchers(HttpMethod.PATCH, "/api/v1/applications/*/verify")
-                    .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER")
+                    .hasAnyRole("FIELD_OFFICER", "DISTRICT_OFFICER", "FINANCE_APPROVER", "ADMIN")
+
+                // Dedicated Officer Workflow & Queue endpoints
+                .requestMatchers("/api/v1/field-verification/**")
+                    .hasAnyRole("FIELD_OFFICER", "ADMIN")
+                .requestMatchers("/api/v1/district-officer/**")
+                    .hasAnyRole("DISTRICT_OFFICER", "ADMIN")
+                .requestMatchers("/api/v1/finance/**")
+                    .hasAnyRole("FINANCE_APPROVER", "ADMIN")
 
                 // Document verification — Field Officer only (they're the ones who
                 // actually check KYC documents; see DocumentService.verifyDocument).
@@ -187,6 +195,10 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/admin/officer-registration-requests/**")
                     .hasRole("ADMIN")
 
+                // Audit logs and decision history
+                .requestMatchers("/api/v1/audit-logs/**")
+                    .hasAnyRole("ADMIN", "DISTRICT_OFFICER", "FIELD_OFFICER", "FINANCE_APPROVER", "BENEFICIARY")
+
                 // Everything else requires authentication (any role)
                 .anyRequest().authenticated()
             )
@@ -199,11 +211,13 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(Arrays.asList(
+        config.setAllowedOriginPatterns(Arrays.asList(
+            "http://localhost:*",
+            "http://127.0.0.1:*",
             "https://digital-subsidy-platform.web.app",
             "https://digital-subsidy-platform.firebaseapp.com",
-            "http://localhost:8080",
-            "http://127.0.0.1:8080"
+            "https://*.onrender.com",
+            "https://*.web.app"
         ));
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));

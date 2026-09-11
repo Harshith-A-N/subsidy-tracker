@@ -111,17 +111,25 @@ public class EligibilityService {
      */
     public List<String> getMissingMandatoryDocuments(Application application) {
         Scheme scheme = application.getScheme();
-        if (scheme.getRequiredDocuments() == null || scheme.getRequiredDocuments().isBlank()) {
-            return List.of();
-        }
+        String reqDocsStr = (scheme != null && scheme.getRequiredDocuments() != null && !scheme.getRequiredDocuments().isBlank())
+                ? scheme.getRequiredDocuments()
+                : "Aadhaar Card, Land Record, Bank Passbook";
 
         List<Document> uploaded = documentRepository.findByApplicationId(application.getId());
+        if (uploaded.isEmpty()) {
+            return Arrays.stream(reqDocsStr.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isBlank())
+                    .toList();
+        }
+
         Set<String> uploadedTypes = uploaded.stream()
-                .map(d -> d.getDocumentType().trim().toLowerCase())
+                .map(d -> d.getDocumentType() != null ? d.getDocumentType().trim().toLowerCase() : "")
                 .collect(Collectors.toSet());
 
-        List<String> required = Arrays.stream(scheme.getRequiredDocuments().split(","))
+        List<String> required = Arrays.stream(reqDocsStr.split(","))
                 .map(String::trim)
+                .filter(s -> !s.isBlank())
                 .toList();
 
         return required.stream()

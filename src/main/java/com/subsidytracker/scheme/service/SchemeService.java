@@ -173,6 +173,10 @@ public class SchemeService {
         dto.setAllowedCategories(s.getAllowedCategories());
         dto.setActive(s.isActive());
         dto.setRequiredDocuments(s.getRequiredDocuments());
+        List<SchemeSlab> slabs = schemeSlabRepository.findBySchemeId(s.getId());
+        if (slabs != null) {
+            dto.setSlabs(slabs.stream().map(this::toSlabDto).toList());
+        }
         return dto;
     }
 

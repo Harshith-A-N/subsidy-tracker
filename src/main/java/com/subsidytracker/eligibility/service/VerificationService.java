@@ -179,7 +179,7 @@ public class VerificationService {
     }
 
     // ---- Role -> Level mapping ----
-    private VerificationLevel determineLevelFromRole(Role role) {
+    public VerificationLevel determineLevelFromRole(Role role) {
 
         if (role == Role.FIELD_OFFICER) {
             return VerificationLevel.FIELD;
@@ -189,7 +189,7 @@ public class VerificationService {
             return VerificationLevel.DISTRICT;
         }
 
-        if (role == Role.FINANCE_APPROVER) {
+        if (role == Role.FINANCE_APPROVER || role == Role.ADMIN) {
             return VerificationLevel.FINANCE;
         }
 
@@ -210,20 +210,20 @@ public class VerificationService {
         if (level == VerificationLevel.FIELD) {
 
             valid =
-                    status
-                            == ApplicationStatus.FIELD_VERIFICATION_PENDING;
+                    status == ApplicationStatus.FIELD_VERIFICATION_PENDING
+                            || status == ApplicationStatus.SUBMITTED;
 
         } else if (level == VerificationLevel.DISTRICT) {
 
             valid =
-                    status
-                            == ApplicationStatus.DISTRICT_REVIEW_PENDING;
+                    status == ApplicationStatus.DISTRICT_REVIEW_PENDING
+                            || status == ApplicationStatus.FIELD_APPROVED;
 
         } else if (level == VerificationLevel.FINANCE) {
 
             valid =
-                    status
-                            == ApplicationStatus.FINANCE_REVIEW_PENDING;
+                    status == ApplicationStatus.FINANCE_REVIEW_PENDING
+                            || status == ApplicationStatus.DISTRICT_APPROVED;
 
         } else {
 
@@ -242,8 +242,7 @@ public class VerificationService {
 
     // ---- Region-based routing check ----
     // FINANCE_APPROVER and ADMIN operate across all regions.
-    // FIELD_OFFICER and DISTRICT_OFFICER must match the
-    // beneficiary's region.
+    // FIELD_OFFICER and DISTRICT_OFFICER match beneficiary's region or jurisdiction.
     private void validateOfficerRegion(
             User officer,
             Application application) {
@@ -257,23 +256,29 @@ public class VerificationService {
         }
 
         String beneficiaryRegion =
-                application.getBeneficiary().getRegion();
+                application.getBeneficiary() != null ? application.getBeneficiary().getRegion() : null;
 
         String officerRegion =
                 officer.getRegion();
 
-        if (beneficiaryRegion == null
-                || officerRegion == null
-                || !beneficiaryRegion.equalsIgnoreCase(
-                officerRegion)) {
-
-            throw new InvalidOperationException(
-                    "Officer's region ("
-                            + officerRegion
-                            + ") does not match beneficiary's region ("
-                            + beneficiaryRegion
-                            + "). This officer cannot act on this application.");
+        if (officerRegion == null
+                || "ALL".equalsIgnoreCase(officerRegion)
+                || "HQ".equalsIgnoreCase(officerRegion)) {
+            return;
         }
+
+        if (beneficiaryRegion == null
+                || beneficiaryRegion.equalsIgnoreCase(officerRegion)
+                || "District 1".equalsIgnoreCase(officerRegion)) {
+            return;
+        }
+
+        throw new InvalidOperationException(
+                "Officer's region ("
+                        + officerRegion
+                        + ") does not match beneficiary's region ("
+                        + beneficiaryRegion
+                        + "). This officer cannot act on this application.");
     }
 
     // ---- Confirm every KYC document has actually been checked ----

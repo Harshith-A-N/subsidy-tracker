@@ -62,6 +62,7 @@ public class AuthService {
                 saved.getEmail(),
                 saved.getFullName(),
                 saved.getRole(),
+                saved.getRegion(),
                 token,
                 "Registration successful."
         );
@@ -114,6 +115,7 @@ public class AuthService {
                 user.getEmail(),
                 user.getFullName(),
                 user.getRole(),
+                user.getRegion(),
                 token,
                 "Login successful."
         );

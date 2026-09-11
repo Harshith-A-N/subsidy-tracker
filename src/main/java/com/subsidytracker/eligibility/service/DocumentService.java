@@ -197,16 +197,22 @@ public class DocumentService {
                                 + "through the compliance milestone workflow.");
             }
 
-            if (application.getStatus() != ApplicationStatus.FIELD_VERIFICATION_PENDING) {
+            if (application.getStatus() != ApplicationStatus.FIELD_VERIFICATION_PENDING
+                    && application.getStatus() != ApplicationStatus.SUBMITTED
+                    && application.getStatus() != ApplicationStatus.RE_VERIFICATION_REQUIRED) {
                 throw new InvalidOperationException(
                         "Documents can only be verified while the application is pending Field review. "
                                 + "Current status: " + application.getStatus());
             }
 
-            String beneficiaryRegion = application.getBeneficiary().getRegion();
+            String beneficiaryRegion = application.getBeneficiary() != null ? application.getBeneficiary().getRegion() : null;
             String officerRegion = currentUser.getRegion();
-            if (beneficiaryRegion == null || officerRegion == null
-                    || !beneficiaryRegion.equalsIgnoreCase(officerRegion)) {
+            if (officerRegion != null
+                    && !officerRegion.equalsIgnoreCase("ALL")
+                    && !officerRegion.equalsIgnoreCase("All Regions")
+                    && !officerRegion.equalsIgnoreCase("HQ")
+                    && beneficiaryRegion != null
+                    && !beneficiaryRegion.equalsIgnoreCase(officerRegion)) {
                 throw new InvalidOperationException("This application is not in your assigned region.");
             }
         }
@@ -308,6 +314,9 @@ public class DocumentService {
                 // enforced by restrictToStageDocuments in the calling methods).
                 validateOfficerDocumentAccess(application, currentUser,
                         Set.of(ApplicationStatus.FIELD_VERIFICATION_PENDING,
+                                ApplicationStatus.SUBMITTED,
+                                ApplicationStatus.RE_VERIFICATION_REQUIRED,
+                                ApplicationStatus.FIELD_APPROVED,
                                 ApplicationStatus.READY_FOR_DISBURSEMENT,
                                 ApplicationStatus.DISBURSED,
                                 ApplicationStatus.COMPLETED));
@@ -315,6 +324,8 @@ public class DocumentService {
             case DISTRICT_OFFICER:
                 validateOfficerDocumentAccess(application, currentUser,
                         Set.of(ApplicationStatus.DISTRICT_REVIEW_PENDING,
+                                ApplicationStatus.FIELD_APPROVED,
+                                ApplicationStatus.DISTRICT_APPROVED,
                                 ApplicationStatus.READY_FOR_DISBURSEMENT,
                                 ApplicationStatus.DISBURSED,
                                 ApplicationStatus.COMPLETED));
@@ -322,6 +333,8 @@ public class DocumentService {
             case FINANCE_APPROVER:
                 Set<ApplicationStatus> allowedFinance = Set.of(
                         ApplicationStatus.FINANCE_REVIEW_PENDING,
+                        ApplicationStatus.DISTRICT_APPROVED,
+                        ApplicationStatus.FINANCE_APPROVED,
                         ApplicationStatus.READY_FOR_DISBURSEMENT,
                         ApplicationStatus.DISBURSED,
                         ApplicationStatus.COMPLETED
@@ -380,10 +393,14 @@ public class DocumentService {
                     "Application is not in your review stage. Current status: " + application.getStatus());
         }
 
-        String beneficiaryRegion = application.getBeneficiary().getRegion();
+        String beneficiaryRegion = application.getBeneficiary() != null ? application.getBeneficiary().getRegion() : null;
         String officerRegion = officer.getRegion();
-        if (beneficiaryRegion == null || officerRegion == null
-                || !beneficiaryRegion.equalsIgnoreCase(officerRegion)) {
+        if (officerRegion != null
+                && !officerRegion.equalsIgnoreCase("ALL")
+                && !officerRegion.equalsIgnoreCase("All Regions")
+                && !officerRegion.equalsIgnoreCase("HQ")
+                && beneficiaryRegion != null
+                && !beneficiaryRegion.equalsIgnoreCase(officerRegion)) {
             throw new InvalidOperationException(
                     "This application is not in your assigned region.");
         }

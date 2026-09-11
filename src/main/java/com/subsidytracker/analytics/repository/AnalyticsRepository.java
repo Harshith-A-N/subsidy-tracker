@@ -111,4 +111,12 @@ public class AnalyticsRepository {
         String jpql = "SELECT rb FROM RegionalBudget rb JOIN FETCH rb.scheme";
         return entityManager.createQuery(jpql, com.subsidytracker.common.entity.RegionalBudget.class).getResultList();
     }
+
+    public List<Object[]> getReleasedDisbursementSchedules() {
+        String jpql = "SELECT ads.dueDate, ads.scheduledAmount " +
+                      "FROM ApplicationDisbursementSchedule ads " +
+                      "WHERE ads.status = com.subsidytracker.common.enums.DisbursementScheduleStatus.RELEASED " +
+                      "ORDER BY ads.dueDate ASC";
+        return entityManager.createQuery(jpql, Object[].class).getResultList();
+    }
 }

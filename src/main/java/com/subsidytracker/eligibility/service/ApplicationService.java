@@ -15,6 +15,8 @@ import com.subsidytracker.eligibility.repository.ApplicationRepository;
 import com.subsidytracker.eligibility.repository.UserRepository;
 import com.subsidytracker.beneficiary.repository.BeneficiaryRepository;
 import com.subsidytracker.scheme.repository.SchemeRepository;
+import com.subsidytracker.scheme.repository.SchemeSlabRepository;
+import com.subsidytracker.eligibility.repository.VerificationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -22,6 +24,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -36,19 +39,25 @@ public class ApplicationService {
     private final UserRepository userRepository;
     private final EligibilityService eligibilityService;
     private final AuditLogService auditLogService;
+    private final SchemeSlabRepository schemeSlabRepository;
+    private final VerificationRepository verificationRepository;
 
     public ApplicationService(ApplicationRepository applicationRepository,
                               BeneficiaryRepository beneficiaryRepository,
                               SchemeRepository schemeRepository,
                               UserRepository userRepository,
                               EligibilityService eligibilityService,
-                              AuditLogService auditLogService) {
+                              AuditLogService auditLogService,
+                              SchemeSlabRepository schemeSlabRepository,
+                              VerificationRepository verificationRepository) {
         this.applicationRepository = applicationRepository;
         this.beneficiaryRepository = beneficiaryRepository;
         this.schemeRepository = schemeRepository;
         this.userRepository = userRepository;
         this.eligibilityService = eligibilityService;
         this.auditLogService = auditLogService;
+        this.schemeSlabRepository = schemeSlabRepository;
+        this.verificationRepository = verificationRepository;
     }
 
     /**
@@ -192,8 +201,26 @@ public class ApplicationService {
         return applicationRepository.findByStatus(status).stream().map(this::toDto).toList();
     }
 
+    public List<ApplicationResponseDto> getApplicationsByStatusIn(List<ApplicationStatus> statuses) {
+        return applicationRepository.findByStatusIn(statuses).stream().map(this::toDto).toList();
+    }
+
+    public List<ApplicationResponseDto> getApplicationsByStatusInAndRegion(List<ApplicationStatus> statuses, String region) {
+        if (region == null || region.equalsIgnoreCase("ALL") || region.equalsIgnoreCase("All Regions") || region.equalsIgnoreCase("HQ")) {
+            return getApplicationsByStatusIn(statuses);
+        }
+        return applicationRepository.findByStatusInAndRegion(statuses, region).stream().map(this::toDto).toList();
+    }
+
     public Page<ApplicationResponseDto> getApplicationsByStatus(ApplicationStatus status, Pageable pageable) {
         return applicationRepository.findByStatus(status, pageable).map(this::toDto);
+    }
+
+    public Page<ApplicationResponseDto> getApplicationsByStatusAndRegion(ApplicationStatus status, String region, Pageable pageable) {
+        if (region == null || region.equalsIgnoreCase("ALL") || region.equalsIgnoreCase("All Regions") || region.equalsIgnoreCase("HQ")) {
+            return getApplicationsByStatus(status, pageable);
+        }
+        return applicationRepository.findByStatusAndRegion(status, region, pageable).map(this::toDto);
     }
 
     /**
@@ -221,17 +248,53 @@ public class ApplicationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Application", id));
     }
 
-    private ApplicationResponseDto toDto(Application a) {
+    public ApplicationResponseDto toDto(Application a) {
         ApplicationResponseDto dto = new ApplicationResponseDto();
         dto.setId(a.getId());
-        dto.setBeneficiaryId(a.getBeneficiary().getId());
-        dto.setBeneficiaryName(a.getBeneficiary().getFullName());
-        dto.setSchemeId(a.getScheme().getId());
-        dto.setSchemeName(a.getScheme().getName());
+        dto.setBeneficiaryId(a.getBeneficiary() != null ? a.getBeneficiary().getId() : null);
+        dto.setBeneficiaryName(a.getBeneficiary() != null ? a.getBeneficiary().getFullName() : null);
+        dto.setSchemeId(a.getScheme() != null ? a.getScheme().getId() : null);
+        dto.setSchemeName(a.getScheme() != null ? a.getScheme().getName() : null);
         dto.setStatus(a.getStatus());
         dto.setEligibilityScore(a.getEligibilityScore());
         dto.setSubmissionDate(a.getSubmissionDate());
         dto.setRemarks(a.getRemarks());
+
+        if (a.getScheme() != null) {
+            BigDecimal grant = new BigDecimal("50000.00");
+            if (a.getBeneficiary() != null && a.getBeneficiary().getCategory() != null) {
+                var slab = schemeSlabRepository.findBySchemeIdAndCategory(a.getScheme().getId(), a.getBeneficiary().getCategory());
+                if (slab.isPresent() && slab.get().getGrantAmount() != null) {
+                    grant = slab.get().getGrantAmount();
+                }
+            }
+            dto.setRequestedAmount(grant);
+            
+            ApplicationResponseDto.SchemeSummaryDto schemeDto = new ApplicationResponseDto.SchemeSummaryDto();
+            schemeDto.setId(a.getScheme().getId());
+            schemeDto.setSchemeName(a.getScheme().getName());
+            schemeDto.setName(a.getScheme().getName());
+            schemeDto.setDescription(a.getScheme().getDescription());
+            schemeDto.setRequiredDocuments(a.getScheme().getRequiredDocuments());
+            dto.setScheme(schemeDto);
+        }
+
+        if (a.getId() != null) {
+            verificationRepository.findTopByApplicationIdOrderByVerificationDateDesc(a.getId())
+                    .ifPresent(v -> dto.setVerificationDate(v.getVerificationDate()));
+        }
+
+        if (a.getBeneficiary() != null) {
+            ApplicationResponseDto.BeneficiarySummaryDto benDto = new ApplicationResponseDto.BeneficiarySummaryDto();
+            benDto.setId(a.getBeneficiary().getId());
+            benDto.setFullName(a.getBeneficiary().getFullName());
+            benDto.setNationalIdNumber(a.getBeneficiary().getNationalIdNumber());
+            benDto.setPhoneNumber(a.getBeneficiary().getPhoneNumber());
+            benDto.setRegion(a.getBeneficiary().getRegion());
+            benDto.setCategory(a.getBeneficiary().getCategory() != null ? a.getBeneficiary().getCategory().name() : null);
+            dto.setBeneficiary(benDto);
+        }
+
         return dto;
     }
 }
